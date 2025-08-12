@@ -8,20 +8,20 @@ TaskFlow AIをVercelにデプロイする際は、以下の環境変数を設定
 
 #### 1. Gemini API Key (必須)
 ```
-VITE_GEMINI_API_KEY=AIzaSyA-4jEpv2dACzU-zvd68yQeCMTEvNKzygY
+VITE_GEMINI_API_KEY=your_gemini_api_key_here
 ```
 - AI対話機能とタスク生成に必要
 - [Google AI Studio](https://makersuite.google.com/app/apikey)から取得
 
 #### 2. Firebase設定 (必須)
 ```
-VITE_FIREBASE_API_KEY=AIzaSyDJxpnAO-mf-Y-AVHu3BEOfFQNVlrEXq1g
-VITE_FIREBASE_AUTH_DOMAIN=taskflow-ai-dc492.firebaseapp.com
-VITE_FIREBASE_DATABASE_URL=https://taskflow-ai-dc492-default-rtdb.asia-southeast1.firebasedatabase.app
-VITE_FIREBASE_PROJECT_ID=taskflow-ai-dc492
-VITE_FIREBASE_STORAGE_BUCKET=taskflow-ai-dc492.firebasestorage.app
-VITE_FIREBASE_MESSAGING_SENDER_ID=829585643084
-VITE_FIREBASE_APP_ID=1:829585643084:web:e50f81208640b3518006e9
+VITE_FIREBASE_API_KEY=your_firebase_api_key_here
+VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+VITE_FIREBASE_DATABASE_URL=https://your-project.firebasedatabase.app
+VITE_FIREBASE_PROJECT_ID=your-project-id
+VITE_FIREBASE_STORAGE_BUCKET=your-project.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+VITE_FIREBASE_APP_ID=your_app_id
 ```
 - デバイス間のデータ同期に必要
 - [Firebase Console](https://console.firebase.google.com/)から取得
