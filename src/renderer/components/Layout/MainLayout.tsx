@@ -90,25 +90,40 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
   useEffect(() => {
     const loadTasks = async () => {
       try {
-        const res = await window.electronAPI.dbGetTasks({ projectId: currentProjectId || 'default' })
-        if (res.success && res.data) {
-          const mapped: ReduxTask[] = res.data.map((row: any) => ({
-            id: row.id,
-            projectId: (row.project_id as string) || 'default',
-            title: row.title,
-            description: row.description ?? '',
-            startDate: new Date(row.start_date),
-            endDate: new Date(row.end_date),
-            progress: row.progress,
-            priority: row.priority,
-            dependencies: row.dependencies ?? [],
-            status: row.status,
-            estimatedHours: row.estimated_hours ?? 0,
-            actualHours: row.actual_hours ?? undefined,
-            assignee: row.assignee ?? undefined,
-            tags: row.tags ?? [],
-          }))
-          dispatch(setTasks(mapped))
+        // Electron環境チェック
+        if (typeof window !== 'undefined' && window.electronAPI) {
+          const res = await window.electronAPI.dbGetTasks({ projectId: currentProjectId || 'default' })
+          if (res.success && res.data) {
+            const mapped: ReduxTask[] = res.data.map((row: any) => ({
+              id: row.id,
+              projectId: (row.project_id as string) || 'default',
+              title: row.title,
+              description: row.description ?? '',
+              startDate: new Date(row.start_date),
+              endDate: new Date(row.end_date),
+              progress: row.progress,
+              priority: row.priority,
+              dependencies: row.dependencies ?? [],
+              status: row.status,
+              estimatedHours: row.estimated_hours ?? 0,
+              actualHours: row.actual_hours ?? undefined,
+              assignee: row.assignee ?? undefined,
+              tags: row.tags ?? [],
+            }))
+            dispatch(setTasks(mapped))
+          }
+        } else {
+          // Web環境の場合は、Firebaseから読み込み（platform.ts経由）
+          const { storage } = await import('../../utils/platform')
+          const res = await storage.getTasks(currentProjectId || 'default')
+          if (res.success && res.data) {
+            const mapped: ReduxTask[] = res.data.map((row: any) => ({
+              ...row,
+              startDate: new Date(row.startDate),
+              endDate: new Date(row.endDate),
+            }))
+            dispatch(setTasks(mapped))
+          }
         }
       } catch (e) {
         console.error('Failed to load tasks for project', currentProjectId, e)
