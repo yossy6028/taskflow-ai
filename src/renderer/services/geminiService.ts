@@ -38,7 +38,7 @@ class GeminiService {
   async chat(message: string, conversationHistory: any[] = []): Promise<string> {
     try {
       this.ensureInitialized();
-      const model = this.genAI!.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const model = this.genAI!.getGenerativeModel({ model: 'gemini-2.5-pro' });
       
       const chat = model.startChat({
         history: conversationHistory.map(msg => ({
@@ -63,7 +63,7 @@ class GeminiService {
   async generateTaskBreakdown(userInput: string, context: TaskBreakdownContext = {}): Promise<any> {
     try {
       this.ensureInitialized();
-      const model = this.genAI!.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const model = this.genAI!.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
       const prompt = this.buildTaskBreakdownPrompt(userInput, context);
       const result = await model.generateContent(prompt);
@@ -92,7 +92,7 @@ class GeminiService {
   async breakdownTask(params: { title: string; targetCount?: number }): Promise<any> {
     try {
       this.ensureInitialized();
-      const model = this.genAI!.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const model = this.genAI!.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
       const targetCount = params.targetCount || 3;
       const prompt = `
@@ -132,7 +132,7 @@ class GeminiService {
   async generateSubtasks(taskTitle: string, taskDescription: string): Promise<any> {
     try {
       this.ensureInitialized();
-      const model = this.genAI!.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const model = this.genAI!.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
       const prompt = `
 タスク「${taskTitle}」を実行可能なサブタスクに分解してください。
@@ -173,7 +173,7 @@ class GeminiService {
   async analyzeDependencies(tasks: any[]): Promise<any> {
     try {
       this.ensureInitialized();
-      const model = this.genAI!.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const model = this.genAI!.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
       const taskList = tasks.map(t => `- ${t.title}: ${t.description || '説明なし'}`).join('\n');
       const prompt = `
