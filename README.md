@@ -111,4 +111,4 @@ Yoshii Katsuhiko
 問題が発生した場合は、以下のコマンドで詳細なログを確認できます：
 ```bash
 npm run dev
-```
+```# Force redeploy
