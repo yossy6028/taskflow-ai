@@ -704,13 +704,6 @@ ${requirementsSummary}
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowProjectCreate(true)}
-              className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/30 text-white text-sm flex items-center gap-1 transition-colors"
-              title="新規プロジェクトで開始"
-            >
-              <PlusCircle size={16} /> 新規プロジェクト
-            </button>
             <button className="p-2 hover:bg-white/20 rounded-lg transition-colors">
               <RefreshCw size={20} />
             </button>
