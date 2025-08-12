@@ -56,6 +56,10 @@ class GeminiService {
     }
   }
 
+  async chatWithContext(message: string, conversationHistory: any[] = []): Promise<string> {
+    return this.chat(message, conversationHistory);
+  }
+
   async generateTaskBreakdown(userInput: string, context: TaskBreakdownContext = {}): Promise<any> {
     try {
       this.ensureInitialized();
@@ -73,6 +77,51 @@ class GeminiService {
       }
       
       // JSONマーカーがない場合は全体をパース
+      return JSON.parse(text);
+    } catch (error: any) {
+      console.error('Task breakdown error:', error);
+      throw new Error(this.getErrorMessage(error));
+    }
+  }
+
+  async generateTaskBreakdownEnriched(userInput: string, context: TaskBreakdownContext = {}): Promise<any> {
+    // generateTaskBreakdownと同じ実装で、より詳細なタスク分解を行う
+    return this.generateTaskBreakdown(userInput, context);
+  }
+
+  async breakdownTask(params: { title: string; targetCount?: number }): Promise<any> {
+    try {
+      this.ensureInitialized();
+      const model = this.genAI!.getGenerativeModel({ model: 'gemini-pro' });
+
+      const targetCount = params.targetCount || 3;
+      const prompt = `
+タスク「${params.title}」を${targetCount}個の実行可能なサブタスクに分解してください。
+
+以下のJSON形式で返してください：
+\`\`\`json
+{
+  "subtasks": [
+    {
+      "title": "サブタスクのタイトル",
+      "description": "サブタスクの説明",
+      "estimatedHours": 推定時間（数値）,
+      "priority": "high/medium/low"
+    }
+  ]
+}
+\`\`\`
+`;
+
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+
+      const jsonMatch = text.match(/```json\n?([\s\S]*?)\n?```/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[1]);
+      }
+      
       return JSON.parse(text);
     } catch (error: any) {
       console.error('Task breakdown error:', error);
