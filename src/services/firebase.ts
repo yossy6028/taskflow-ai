@@ -19,25 +19,50 @@ import {
   remove 
 } from 'firebase/database';
 
-// Firebase設定（環境変数から読み込み）
+// Firebase設定（環境変数から読み込み、フォールバック付き）
 const firebaseConfig = {
-  apiKey: process.env.VITE_FIREBASE_API_KEY || '',
-  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || '',
-  databaseURL: process.env.VITE_FIREBASE_DATABASE_URL || '',
-  projectId: process.env.VITE_FIREBASE_PROJECT_ID || '',
-  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: process.env.VITE_FIREBASE_APP_ID || ''
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyDJxpnAO-mf-Y-AVHu3BEOfFQNVlrEXq1g',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'taskflow-ai-dc492.firebaseapp.com',
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || 'https://taskflow-ai-dc492-default-rtdb.asia-southeast1.firebasedatabase.app',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'taskflow-ai-dc492',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'taskflow-ai-dc492.firebasestorage.app',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '829585643084',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:829585643084:web:e50f81208640b3518006e9'
 };
 
+// デバッグ用（開発環境でのみ表示）
+if (import.meta.env.DEV) {
+  console.log('Firebase Config:', {
+    ...firebaseConfig,
+    apiKey: firebaseConfig.apiKey ? '***' : 'missing'
+  });
+}
+
 // Firebase初期化
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const database = getDatabase(app);
+let app;
+let auth;
+let database;
+
+try {
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  database = getDatabase(app);
+} catch (error) {
+  console.error('Firebase initialization error:', error);
+  // フォールバック設定
+  app = null as any;
+  auth = null as any;
+  database = null as any;
+}
+
+export { auth, database };
 
 // 認証関連の関数
 export const firebaseAuth = {
   signUp: async (email: string, password: string) => {
+    if (!auth) {
+      return { success: false, error: 'Firebase not initialized' };
+    }
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       return { success: true, user: userCredential.user };
@@ -47,6 +72,9 @@ export const firebaseAuth = {
   },
 
   signIn: async (email: string, password: string) => {
+    if (!auth) {
+      return { success: false, error: 'Firebase not initialized' };
+    }
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       return { success: true, user: userCredential.user };
@@ -56,6 +84,9 @@ export const firebaseAuth = {
   },
 
   signOut: async () => {
+    if (!auth) {
+      return { success: false, error: 'Firebase not initialized' };
+    }
     try {
       await signOut(auth);
       return { success: true };
@@ -65,11 +96,15 @@ export const firebaseAuth = {
   },
 
   onAuthStateChange: (callback: (user: User | null) => void) => {
+    if (!auth) {
+      callback(null);
+      return () => {};
+    }
     return onAuthStateChanged(auth, callback);
   },
 
   getCurrentUser: () => {
-    return auth.currentUser;
+    return auth?.currentUser || null;
   }
 };
 
