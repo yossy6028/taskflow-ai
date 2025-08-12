@@ -700,7 +700,7 @@ ${requirementsSummary}
             </div>
             <div>
               <h2 className="text-xl font-bold">AI対話セッション</h2>
-              <p className="text-white/80 text-sm">Gemini 2.5 Pro による分析</p>
+              <p className="text-white/80 text-sm">Gemini 1.5 Pro による分析</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
