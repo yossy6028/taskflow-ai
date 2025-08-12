@@ -135,15 +135,15 @@ const TaskPlanningDialog: React.FC<TaskPlanningDialogProps> = ({
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.9, opacity: 0 }}
-          className="bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden"
+          className="bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl p-4 md:p-6 max-w-2xl w-full mx-2 md:mx-4 max-h-[85vh] md:max-h-[80vh] flex flex-col"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100 mb-2">
+          <div className="mb-4 md:mb-6 flex-shrink-0">
+            <h2 className="text-xl md:text-2xl font-bold text-neutral-900 dark:text-neutral-100 mb-2">
               タスク計画の詳細設定
             </h2>
-            <p className="text-neutral-600 dark:text-neutral-400">
+            <p className="text-sm md:text-base text-neutral-600 dark:text-neutral-400">
               プロジェクトに最適なタスクを生成するため、いくつか質問させてください
             </p>
             
@@ -164,7 +164,7 @@ const TaskPlanningDialog: React.FC<TaskPlanningDialogProps> = ({
           </div>
 
           {/* Content */}
-          <div className="min-h-[300px] mb-6">
+          <div className="flex-1 overflow-y-auto min-h-[200px] md:min-h-[300px] mb-4 md:mb-6">
             <AnimatePresence mode="wait">
               {/* Step 1: Main Goal */}
               {step === 1 && (
@@ -514,7 +514,7 @@ const TaskPlanningDialog: React.FC<TaskPlanningDialogProps> = ({
           </div>
 
           {/* Footer */}
-          <div className="flex justify-between items-center pt-4 border-t border-neutral-200 dark:border-neutral-800">
+          <div className="flex justify-between items-center pt-3 md:pt-4 border-t border-neutral-200 dark:border-neutral-800 flex-shrink-0">
             <button
               onClick={onClose}
               className="px-4 py-2 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"

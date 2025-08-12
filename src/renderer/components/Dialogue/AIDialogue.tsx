@@ -937,20 +937,20 @@ ${requirementsSummary}
 
       {/* Review Panel */}
       {showReview && editingTaskIndex === null && (
-        <div className="fixed inset-x-0 bottom-0 z-40 bg-white dark:bg-neutral-900 border-t border-neutral-200 dark:border-neutral-800 p-4">
+        <div className="fixed inset-x-0 bottom-0 z-40 bg-white dark:bg-neutral-900 border-t border-neutral-200 dark:border-neutral-800 p-2 md:p-4">
           <div className="max-w-5xl mx-auto">
-            <h4 className="font-semibold mb-3 text-lg">AIが提案したタスク案</h4>
-            <div className="max-h-96 overflow-y-auto space-y-2">
+            <h4 className="font-semibold mb-2 md:mb-3 text-base md:text-lg">AIが提案したタスク案</h4>
+            <div className="max-h-60 md:max-h-96 overflow-y-auto space-y-2">
               {pendingTasks.map((t, i) => (
-                <div key={i} className="p-3 bg-neutral-50 dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between">
+                <div key={i} className="p-2 md:p-3 bg-neutral-50 dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 hover:shadow-md transition-shadow">
+                  <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2">
                     <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <span className="w-6 h-6 rounded-full bg-primary-500 text-white text-xs flex items-center justify-center font-bold">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <span className="w-6 h-6 rounded-full bg-primary-500 text-white text-xs flex items-center justify-center font-bold flex-shrink-0">
                           {i + 1}
                         </span>
-                        <h5 className="font-medium text-neutral-900 dark:text-neutral-100">{t.title || '未設定'}</h5>
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                        <h5 className="font-medium text-sm md:text-base text-neutral-900 dark:text-neutral-100 flex-1">{t.title || '未設定'}</h5>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${
                           t.priority === 'high' 
                             ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                             : t.priority === 'medium'
@@ -960,30 +960,32 @@ ${requirementsSummary}
                           {t.priority === 'high' ? '高' : t.priority === 'medium' ? '中' : '低'}
                         </span>
                       </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm text-neutral-600 dark:text-neutral-400">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">担当:</span>
-                          <select
-                            value={t.assignee || ''}
-                            onChange={(e) => setPendingTasks(prev => prev.map((pt, idx) => 
-                              idx === i ? { ...pt, assignee: e.target.value } : pt
-                            ))}
-                            className="px-2 py-1 rounded border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-sm"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <option value="">未割当</option>
-                            {teamMembers.filter(m => m.isActive).map(member => (
-                              <option key={member.id} value={member.name}>
-                                {member.name} {member.role ? `(${member.role})` : ''}
-                              </option>
-                            ))}
-                          </select>
+                      <div className="flex flex-col gap-1 text-xs md:text-sm text-neutral-600 dark:text-neutral-400">
+                        <div className="flex flex-wrap gap-2">
+                          <div className="flex items-center gap-1">
+                            <span className="font-medium">担当:</span>
+                            <select
+                              value={t.assignee || ''}
+                              onChange={(e) => setPendingTasks(prev => prev.map((pt, idx) => 
+                                idx === i ? { ...pt, assignee: e.target.value } : pt
+                              ))}
+                              className="px-1 md:px-2 py-0.5 md:py-1 rounded border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs md:text-sm"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <option value="">未割当</option>
+                              {teamMembers.filter(m => m.isActive).map(member => (
+                                <option key={member.id} value={member.name}>
+                                  {member.name} {member.role ? `(${member.role})` : ''}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <span className="font-medium">工数:</span> {t.estimatedHours || 0}h
+                          </div>
                         </div>
                         <div>
                           <span className="font-medium">期間:</span> {t.startDate} 〜 {t.endDate}
-                        </div>
-                        <div>
-                          <span className="font-medium">工数:</span> {t.estimatedHours || 0}h
                         </div>
                         <div>
                           <span className="font-medium">タグ:</span> {t.tags || 'なし'}
@@ -995,28 +997,30 @@ ${requirementsSummary}
                         </p>
                       )}
                     </div>
-                    <div className="flex gap-1 ml-3">
+                    <div className="flex gap-1 md:ml-3">
                       <button
                         onClick={() => setEditingTaskIndex(i)}
-                        className="p-2 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-lg transition-colors"
+                        className="p-1.5 md:p-2 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-lg transition-colors"
                         title="詳細編集"
                       >
-                        <Edit3 size={16} />
+                        <Edit3 size={14} className="md:hidden" />
+                        <Edit3 size={16} className="hidden md:block" />
                       </button>
                       <button
                         onClick={() => setPendingTasks(prev => prev.filter((_, idx) => idx !== i))}
-                        className="p-2 hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600 rounded-lg transition-colors"
+                        className="p-1.5 md:p-2 hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600 rounded-lg transition-colors"
                         title="削除"
                       >
-                        <Trash2 size={16} />
+                        <Trash2 size={14} className="md:hidden" />
+                        <Trash2 size={16} className="hidden md:block" />
                       </button>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
-            <div className="flex justify-between items-center mt-4 pt-3 border-t border-neutral-200 dark:border-neutral-700">
-              <div className="flex items-center gap-3">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mt-3 md:mt-4 pt-2 md:pt-3 border-t border-neutral-200 dark:border-neutral-700">
+              <div className="flex flex-wrap items-center gap-2 md:gap-3">
                 <button
                   onClick={() => setPendingTasks(prev => ([...prev, { 
                     title: '', 
