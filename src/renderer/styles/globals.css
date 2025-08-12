@@ -24,6 +24,18 @@
     --blur-lg: 16px;
     --blur-xl: 24px;
   }
+  
+  /* Mobile-specific adjustments */
+  @media (max-width: 768px) {
+    html {
+      font-size: 14px;
+    }
+    
+    body {
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+    }
+  }
 
   /* Remove invalid apply that caused PostCSS error */
   /* * { border-color: theme('colors.neutral.200'); } */

@@ -38,8 +38,9 @@ interface MainLayoutProps {
 
 const MainLayout: React.FC<MainLayoutProps> = () => {
   const dispatch = useDispatch()
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(false) // モバイルではデフォルトで閉じる
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
   const [darkMode, setDarkMode] = useState(false)
   const [activeSection, setActiveSection] = useState('dialogue')
   const [showNotifications, setShowNotifications] = useState(false)
@@ -71,6 +72,18 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
       setDarkMode(true)
       document.documentElement.classList.add('dark')
     }
+    
+    // モバイル判定とリサイズハンドラー
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 768
+      setIsMobile(mobile)
+      // デスクトップではサイドバーを開く、モバイルでは閉じる
+      setSidebarOpen(!mobile)
+    }
+    
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
   // 現在のプロジェクトのタスクをロード（初回とプロジェクト切替時）
@@ -146,7 +159,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
           <div className="flex items-center gap-4">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+              className="hidden md:block p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
             >
               {sidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
             </button>
@@ -154,12 +167,12 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
             {/* Logo */}
             <div className="flex items-center gap-3">
               <div className="relative">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center shadow-lg">
-                  <Sparkles className="w-6 h-6 text-white" />
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center shadow-lg">
+                  <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                 </div>
                 <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-success-500 rounded-full border-2 border-white dark:border-neutral-900 animate-pulse" />
               </div>
-              <div>
+              <div className="hidden sm:block">
                 <h1 className="text-xl font-bold bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent">
                   TaskFlow AI
                 </h1>
@@ -188,11 +201,11 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
           </div>
 
           {/* Right Section */}
-          <div className="flex items-center gap-2">
-            {/* Notifications */}
+          <div className="flex items-center gap-1 sm:gap-2">
+            {/* Notifications - Hidden on mobile */}
             <button
               onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+              className="hidden sm:block relative p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
             >
               <Bell size={20} />
               <span className="absolute top-1 right-1 w-2 h-2 bg-error-500 rounded-full animate-pulse" />
@@ -201,7 +214,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
             {/* Theme Toggle */}
             <button
               onClick={toggleTheme}
-              className="p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+              className="p-1.5 sm:p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
             >
               <AnimatePresence mode="wait">
                 {darkMode ? (
@@ -228,9 +241,9 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
               </AnimatePresence>
             </button>
 
-            {/* Profile */}
-            <div className="flex items-center gap-3 ml-2 pl-2 border-l border-neutral-200 dark:border-neutral-800">
-              <div className="hidden sm:block text-right">
+            {/* Profile - Hidden on mobile */}
+            <div className="hidden sm:flex items-center gap-3 ml-2 pl-2 border-l border-neutral-200 dark:border-neutral-800">
+              <div className="hidden lg:block text-right">
                 <p className="text-sm font-medium">Yoshii Katsuhiko</p>
                 <p className="text-xs text-neutral-500 dark:text-neutral-400">プロジェクトマネージャー</p>
               </div>
@@ -241,15 +254,23 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
 
             {/* Mobile Menu Toggle */}
             <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="md:hidden p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
             >
-              {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+              {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
           </div>
         </div>
       </header>
 
+      {/* Mobile Overlay */}
+      {isMobile && sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-20 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+      
       {/* Sidebar */}
       <AnimatePresence>
         {sidebarOpen && (
@@ -258,7 +279,9 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
             animate="open"
             exit="closed"
             variants={sidebarVariants}
-            className="fixed left-0 top-16 bottom-0 w-72 bg-white/90 dark:bg-neutral-900/90 backdrop-blur-xl border-r border-neutral-200 dark:border-neutral-800 z-30 overflow-hidden"
+            className={`fixed left-0 top-16 bottom-0 w-72 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-xl border-r border-neutral-200 dark:border-neutral-800 overflow-hidden ${
+              isMobile ? 'z-30' : 'z-20'
+            }`}
           >
             <div className="flex flex-col h-full">
               {/* Navigation */}
@@ -266,7 +289,11 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
                 {menuItems.map((item) => (
                   <motion.button
                     key={item.id}
-                    onClick={() => setActiveSection(item.id)}
+                    onClick={() => {
+                      setActiveSection(item.id)
+                      // モバイルではメニュー選択後にサイドバーを閉じる
+                      if (isMobile) setSidebarOpen(false)
+                    }}
                     className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 group ${
                       activeSection === item.id
                         ? 'bg-gradient-to-r from-primary-500 to-secondary-500 text-white shadow-lg shadow-primary-500/25'
@@ -321,13 +348,22 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
 
               {/* Quick Actions */}
               <div className="p-4 border-t border-neutral-200 dark:border-neutral-800">
-                <button className="w-full btn btn-gradient shadow-lg">
+                <button 
+                  className="w-full btn btn-gradient shadow-lg"
+                  onClick={() => {
+                    setActiveSection('dialogue')
+                    if (isMobile) setSidebarOpen(false)
+                  }}
+                >
                   <Sparkles className="w-4 h-4 mr-2" />
                   新しいタスクを作成
                 </button>
                 <button
                   className="w-full mt-2 px-4 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
-                  onClick={() => setShowProjectCreate(true)}
+                  onClick={() => {
+                    setShowProjectCreate(true)
+                    if (isMobile) setSidebarOpen(false)
+                  }}
                 >
                   新しいプロジェクト
                 </button>
@@ -340,7 +376,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
       {/* Main Content */}
       <main
         className={`pt-16 min-h-screen transition-all duration-300 ${
-          sidebarOpen ? 'lg:ml-72' : 'lg:ml-0'
+          sidebarOpen && !isMobile ? 'md:ml-72' : 'md:ml-0'
         }`}
       >
         <div className="h-[calc(100vh-4rem)] box-border overflow-y-auto p-4 lg:p-6">
