@@ -577,14 +577,17 @@ ${requirementsSummary}
     if (isApproving) return
     setIsApproving(true)
     try {
+      // プラットフォーム統一APIを使用
+      const { storage } = await import('../../utils/platform')
+      
       // 既存タスクを取得して重複を事前にスキップ（ゆるい類似判定）
-      const existing = await window.electronAPI.dbGetTasks({ projectId: currentProjectId || 'default' })
+      const existing = await storage.getTasks(currentProjectId || 'default')
       type ExistingKey = { titleNorm: string; assignee: string; startDay: string; endDay: string }
       const existingList: ExistingKey[] = []
       if (existing.success && existing.data) {
         for (const row of existing.data) {
-          const startDay = new Date(row.start_date).toISOString().slice(0,10)
-          const endDay = new Date(row.end_date).toISOString().slice(0,10)
+          const startDay = new Date(row.startDate || row.start_date).toISOString().slice(0,10)
+          const endDay = new Date(row.endDate || row.end_date).toISOString().slice(0,10)
           existingList.push({
             titleNorm: normalizeText(row.title || ''),
             assignee: (row.assignee || '').trim(),
@@ -632,7 +635,7 @@ ${requirementsSummary}
         const batchKey = `${titleNorm}__${assignee}__${startDay}__${endDay}`
         if (dupInExisting || createdKeys.has(batchKey)) continue
 
-        await window.electronAPI.dbCreateTask({
+        await storage.saveTask({
           id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
           projectId: currentProjectId || 'default',
           title: t.title,
@@ -655,21 +658,21 @@ ${requirementsSummary}
       }
 
       // 追加: 承認後にDBから最新のタスクを取得してReduxへ反映
-      const res = await window.electronAPI.dbGetTasks({ projectId: currentProjectId || 'default' })
+      const res = await storage.getTasks(currentProjectId || 'default')
       if (res.success && res.data) {
-        const mapped: ReduxTask[] = res.data.map((row: DBTaskRow) => ({
+        const mapped: ReduxTask[] = res.data.map((row: any) => ({
           id: row.id,
-          projectId: (row as any).project_id || 'default',
+          projectId: row.projectId || (row as any).project_id || 'default',
           title: row.title,
           description: row.description ?? '',
-          startDate: new Date(row.start_date),
-          endDate: new Date(row.end_date),
+          startDate: new Date(row.startDate || row.start_date),
+          endDate: new Date(row.endDate || row.end_date),
           progress: row.progress,
           priority: row.priority,
           dependencies: row.dependencies ?? [],
           status: row.status,
-          estimatedHours: row.estimated_hours ?? 0,
-          actualHours: row.actual_hours ?? undefined,
+          estimatedHours: row.estimatedHours ?? row.estimated_hours ?? 0,
+          actualHours: row.actualHours ?? row.actual_hours ?? undefined,
           assignee: row.assignee ?? undefined,
           tags: row.tags ?? [],
         }))
