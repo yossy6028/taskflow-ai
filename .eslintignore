@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+out/
+coverage/
+*.config.js
+*.config.ts
+public/
+.next/
+.cache/
+*.d.ts
+vite.config.ts
+tailwind.config.js
