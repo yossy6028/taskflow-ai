@@ -374,13 +374,13 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
                   新しいタスクを作成
                 </button>
                 <button
-                  className="w-full mt-2 px-4 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                  className="w-full mt-2 px-4 py-2 rounded-lg bg-gradient-to-r from-secondary-500 to-primary-500 text-white font-medium shadow-md hover:shadow-lg transition-all duration-200"
                   onClick={() => {
                     setShowProjectCreate(true)
                     if (isMobile) setSidebarOpen(false)
                   }}
                 >
-                  新しいプロジェクト
+                  新しいプロジェクトを作成
                 </button>
               </div>
             </div>
