@@ -888,39 +888,42 @@ ${requirementsSummary}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="アイデアや質問を入力してください..."
-              className="w-full px-4 py-3 pr-12 bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all duration-200 resize-none outline-none"
+              className="w-full px-4 py-3 pr-12 md:pr-32 bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all duration-200 resize-none outline-none"
               rows={1}
               style={{ minHeight: '48px', maxHeight: '120px' }}
             />
-            <div className="absolute right-2 bottom-2 flex items-center gap-1">
-              <button className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors">
-                <Paperclip size={18} className="text-neutral-500" />
+            <div className="absolute right-2 bottom-2 flex items-center gap-0.5 md:gap-1">
+              <button className="p-1 md:p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors">
+                <Paperclip size={14} className="md:hidden text-neutral-500" />
+                <Paperclip size={18} className="hidden md:block text-neutral-500" />
               </button>
-              <button className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors">
-                <Image size={18} className="text-neutral-500" />
+              <button className="p-1 md:p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors">
+                <Image size={14} className="md:hidden text-neutral-500" />
+                <Image size={18} className="hidden md:block text-neutral-500" />
               </button>
-              <button className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors">
-                <Mic size={18} className="text-neutral-500" />
+              <button className="p-1 md:p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors">
+                <Mic size={14} className="md:hidden text-neutral-500" />
+                <Mic size={18} className="hidden md:block text-neutral-500" />
               </button>
             </div>
           </div>
           <motion.button
             onClick={handleSend}
             disabled={!inputValue.trim() || isTyping}
-            className="px-6 py-3 bg-gradient-to-r from-primary-500 to-secondary-500 text-white rounded-xl font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-xl transition-all duration-200"
+            className="px-3 md:px-6 py-3 bg-gradient-to-r from-primary-500 to-secondary-500 text-white rounded-xl font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-xl transition-all duration-200"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
             {isTyping ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
+              <Loader2 className="w-4 md:w-5 h-4 md:h-5 animate-spin" />
             ) : (
-              <Send className="w-5 h-5" />
+              <Send className="w-4 md:w-5 h-4 md:h-5" />
             )}
           </motion.button>
         </div>
         
-        {/* Input hints */}
-        <div className="flex items-center justify-between mt-2 px-1">
+        {/* Input hints - Hidden on mobile */}
+        <div className="hidden md:flex items-center justify-between mt-2 px-1">
           <div className="flex items-center gap-4 text-xs text-neutral-500 dark:text-neutral-400">
             <span className="flex items-center gap-1">
               <Hash size={12} />
