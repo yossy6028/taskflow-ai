@@ -635,7 +635,7 @@ ${requirementsSummary}
         const batchKey = `${titleNorm}__${assignee}__${startDay}__${endDay}`
         if (dupInExisting || createdKeys.has(batchKey)) continue
 
-        await storage.saveTask({
+        const taskData = {
           id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
           projectId: currentProjectId || 'default',
           title: t.title,
@@ -652,13 +652,19 @@ ${requirementsSummary}
           actualHours: t.actualHours,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-        })
+        }
+        
+        console.log('Saving task:', taskData)
+        const saveResult = await storage.saveTask(taskData)
+        console.log('Save result:', saveResult)
 
         createdKeys.add(batchKey)
       }
 
       // 追加: 承認後にDBから最新のタスクを取得してReduxへ反映
+      console.log('Getting tasks for project:', currentProjectId || 'default')
       const res = await storage.getTasks(currentProjectId || 'default')
+      console.log('Got tasks:', res)
       if (res.success && res.data) {
         const mapped: ReduxTask[] = res.data.map((row: any) => ({
           id: row.id,
@@ -941,7 +947,7 @@ ${requirementsSummary}
       {/* Review Panel */}
       {showReview && editingTaskIndex === null && (
         <div className="fixed inset-x-0 bottom-0 z-40 bg-white dark:bg-neutral-900 border-t border-neutral-200 dark:border-neutral-800 p-2 md:p-4">
-          <div className="max-w-5xl mx-auto">
+          <div className="w-full md:max-w-5xl md:mx-auto">
             <h4 className="font-semibold mb-2 md:mb-3 text-base md:text-lg">AIが提案したタスク案</h4>
             <div className="max-h-60 md:max-h-96 overflow-y-auto space-y-2">
               {pendingTasks.map((t, i) => (

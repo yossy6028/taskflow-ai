@@ -114,8 +114,8 @@ export const geminiAPI = {
 export const storage = {
   async saveTask(task: any) {
     if (isElectron()) {
-      // Electron: SQLite経由
-      return window.electronAPI.dbSaveTask(task);
+      // Electron: SQLite経由 - dbCreateTaskを使用
+      return window.electronAPI.dbCreateTask(task);
     } else {
       // Web: Firebase経由
       const { firebaseAuth, firebaseDB } = await import('../../services/firebase');
