@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { geminiAPI } from '../../utils/platform'
 import { motion } from 'framer-motion'
 import { 
   MessageSquare, 
@@ -183,7 +184,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       setLoading(true)
       setError(null)
       const payload = tasks.map((t) => ({ id: t.id, title: t.title }))
-      const res = await window.electronAPI.geminiAnalyzeDependencies(payload as any)
+      const res = await geminiAPI.analyzeDependencies(payload as any)
       if (res.success) {
         setAnalysis(res.data)
       } else {

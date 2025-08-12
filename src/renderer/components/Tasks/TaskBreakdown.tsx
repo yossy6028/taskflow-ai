@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { geminiAPI } from '../../utils/platform'
 import { useDispatch, useSelector } from 'react-redux'
 import { RootState } from '../../store'
 import { updateTask as updateReduxTask } from '../../store/slices/tasksSlice'
@@ -94,7 +95,7 @@ const TaskBreakdown: React.FC<TaskBreakdownProps> = ({ taskId, taskTitle, onGene
     localStorage.setItem(`task-todos-generated-${taskId}`, 'true') // タスクごとに記録
     try {
       // AIによるタスク細分化
-      const result = await window.electronAPI.geminiBreakdownTask({
+      const result = await geminiAPI.breakdownTask({
         title: taskTitle,
         targetCount: 8 // 5-10個のTODOに分解
       })

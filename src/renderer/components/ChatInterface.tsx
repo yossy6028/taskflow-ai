@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react'
+import { geminiAPI } from '../utils/platform';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../store';
 import { addMessage, setLoading } from '../store/slices/chatSlice';
@@ -39,7 +40,7 @@ const ChatInterface: React.FC = () => {
         content: msg.content
       }));
       
-      const response = await window.electronAPI.geminiChat(input, conversationHistory);
+      const response = await geminiAPI.chat(input, conversationHistory);
       
       if (response.success) {
         const assistantMessage = {
@@ -80,7 +81,7 @@ const ChatInterface: React.FC = () => {
         priority: 'medium' as const,
       };
       
-      const result = await window.electronAPI.geminiBreakdown(projectDescription, context);
+      const result = await geminiAPI.breakdown(projectDescription, context);
       
       if (result.success && result.data) {
         // TODO: Process and add tasks to the task list

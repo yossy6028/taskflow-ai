@@ -10,6 +10,7 @@ export interface TaskBreakdownContext {
   deadline?: string;
   priority?: 'low' | 'medium' | 'high';
   resources?: string[];
+  projectName?: string;
 }
 
 export interface GeneratedTask {

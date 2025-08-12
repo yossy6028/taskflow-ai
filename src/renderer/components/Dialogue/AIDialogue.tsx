@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
+import { geminiAPI } from '../../utils/platform'
 import { setTasks, Task as ReduxTask } from '../../store/slices/tasksSlice'
 import { addProject, setCurrentProject } from '../../store/slices/projectsSlice'
 import { setTeamMembers } from '../../store/slices/teamSlice'
@@ -193,7 +194,8 @@ const AIDialogue: React.FC = () => {
         .map(m => `${m.type === 'user' ? 'ユーザー' : 'AI'}: ${m.content}`)
         .join('\n')
         .slice(-8000) // 安全のため制限
-      const res = await window.electronAPI.geminiBreakdownEnriched(combined, { priority: 'medium' })
+      
+      const res = await geminiAPI.breakdownEnriched(combined, { priority: 'medium' })
       if (res.success && res.data) {
         const tasks = dedupePendingTasks(mapGeneratedToPending(res.data.tasks || []))
         if (tasks.length > 0) {
@@ -201,18 +203,53 @@ const AIDialogue: React.FC = () => {
           setShowReview(true)
           return
         }
+      } else if (res.message) {
+        // APIエラーメッセージを表示
+        setMessages(prev => [...prev, {
+          id: (Date.now() + 0.1).toString(),
+          type: 'ai',
+          content: `エラーが発生しました: ${res.message}
+
+API設定を確認するか、しばらく待ってから再度お試しください。`,
+          timestamp: new Date(),
+        }])
+        return
       }
+      
       // フォールバック: 通常の分解を試行
-      const fb = await window.electronAPI.geminiBreakdown(combined, { priority: 'medium' })
+      const fb = await geminiAPI.breakdown(combined, { priority: 'medium' })
       if (fb.success && fb.data) {
         const tasks = dedupePendingTasks(mapGeneratedToPending(fb.data.tasks || []))
         if (tasks.length > 0) {
           setPendingTasks(tasks)
           setShowReview(true)
+          return
         }
+      } else if (fb.message) {
+        setMessages(prev => [...prev, {
+          id: (Date.now() + 0.2).toString(),
+          type: 'ai',
+          content: `タスク生成に失敗しました: ${fb.message}`,
+          timestamp: new Date(),
+        }])
+        return
       }
-    } catch (e) {
+      
+      // 両方失敗した場合
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 0.3).toString(),
+        type: 'ai',
+        content: 'タスク生成に失敗しました。入力内容を見直すか、API設定を確認してください。',
+        timestamp: new Date(),
+      }])
+    } catch (e: any) {
       console.error('Generate from conversation failed', e)
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 0.4).toString(),
+        type: 'ai',
+        content: `予期しないエラーが発生しました: ${e.message || 'Unknown error'}`,
+        timestamp: new Date(),
+      }])
     } finally {
       setIsTyping(false)
     }
@@ -352,7 +389,7 @@ ${requirementsSummary}
     setTimeout(async () => {
       try {
         // 詳細補完込みでドラフト生成
-        const result = await window.electronAPI.geminiBreakdownEnriched(enrichedInput, { 
+        const result = await geminiAPI.breakdownEnriched(enrichedInput, { 
           priority: requirements.priority || 'medium' as const,
           projectName: currentProject?.name || undefined
         })
@@ -431,7 +468,7 @@ ${requirementsSummary}
         }
 
         // フォールバック（上で1件も出なかった場合のみ）
-        const fb = await window.electronAPI.geminiBreakdown(enrichedInput, { 
+        const fb = await geminiAPI.breakdown(enrichedInput, { 
           priority: requirements.priority || 'medium' as const,
           projectName: currentProject?.name || undefined
         })
@@ -460,19 +497,27 @@ ${requirementsSummary}
           }
         }
         
-        // 失敗
+        // 生成失敗時のエラーメッセージ改善
+        const errorMsg = result.message || fb.message || '不明なエラー'
         setMessages(prev => [...prev, {
           id: (Date.now() + 1).toString(),
           type: 'ai',
-          content: 'タスク案の生成に失敗しました。要件を見直して再度お試しください。',
+          content: `タスク案の生成に失敗しました: ${errorMsg}
+
+以下を確認してください:
+• API設定が正しいか
+• ネットワーク接続が安定しているか
+• 入力内容が明確で具体的か`,
           timestamp: new Date(),
         }])
-      } catch (err) {
+      } catch (err: any) {
         console.error('Task generation failed', err)
         setMessages(prev => [...prev, {
           id: (Date.now() + 1).toString(),
           type: 'ai',
-          content: 'エラーが発生しました。しばらく待ってから再度お試しください。',
+          content: `システムエラーが発生しました: ${err.message || 'Unknown error'}
+
+しばらく待ってから再度お試しください。問題が続く場合はサポートにお問い合わせください。`,
           timestamp: new Date(),
         }])
       } finally {

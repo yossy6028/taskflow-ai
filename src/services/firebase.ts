@@ -21,17 +21,17 @@ import {
 
 // Firebase設定（環境変数から読み込み、フォールバック付き）
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyDJxpnAO-mf-Y-AVHu3BEOfFQNVlrEXq1g',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'taskflow-ai-dc492.firebaseapp.com',
-  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || 'https://taskflow-ai-dc492-default-rtdb.asia-southeast1.firebasedatabase.app',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'taskflow-ai-dc492',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'taskflow-ai-dc492.firebasestorage.app',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '829585643084',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:829585643084:web:e50f81208640b3518006e9'
+  apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || 'AIzaSyDJxpnAO-mf-Y-AVHu3BEOfFQNVlrEXq1g',
+  authDomain: (import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN || 'taskflow-ai-dc492.firebaseapp.com',
+  databaseURL: (import.meta as any).env?.VITE_FIREBASE_DATABASE_URL || 'https://taskflow-ai-dc492-default-rtdb.asia-southeast1.firebasedatabase.app',
+  projectId: (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || 'taskflow-ai-dc492',
+  storageBucket: (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET || 'taskflow-ai-dc492.firebasestorage.app',
+  messagingSenderId: (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '829585643084',
+  appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || '1:829585643084:web:e50f81208640b3518006e9'
 };
 
 // デバッグ用（開発環境でのみ表示）
-if (import.meta.env.DEV) {
+if ((import.meta as any).env?.DEV) {
   console.log('Firebase Config:', {
     ...firebaseConfig,
     apiKey: firebaseConfig.apiKey ? '***' : 'missing'

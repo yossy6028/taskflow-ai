@@ -1,4 +1,9 @@
 // プラットフォーム判定ユーティリティ
+import { getWebGeminiService } from '../services/geminiService';
+import type { TaskBreakdownContext } from '../services/geminiService';
+import type { ConversationMessage } from '../../shared/types';
+
+export type { TaskBreakdownContext } from '../services/geminiService';
 
 export const isElectron = () => {
   return typeof window !== 'undefined' && 
@@ -7,6 +12,102 @@ export const isElectron = () => {
 
 export const isWeb = () => {
   return !isElectron();
+};
+
+// Web環境用のGemini APIラッパー
+// getWebGeminiServiceはgeminiService.tsからインポート済み
+
+// プラットフォーム統一APIインターフェース
+export const geminiAPI = {
+  async chat(prompt: string, conversationHistory: ConversationMessage[] = []) {
+    if (isElectron()) {
+      try {
+        return await window.electronAPI.geminiChat(prompt, conversationHistory);
+      } catch (error: any) {
+        return { success: false, message: error.message || 'Electron Gemini API error' };
+      }
+    } else {
+      try {
+        const service = getWebGeminiService();
+        const message = await service.chatWithContext(prompt, conversationHistory);
+        return { success: true, message };
+      } catch (error: any) {
+        return { success: false, message: error.message || 'Web Gemini API error' };
+      }
+    }
+  },
+
+  async breakdown(userInput: string, context: TaskBreakdownContext = {}) {
+    if (isElectron()) {
+      try {
+        return await window.electronAPI.geminiBreakdown(userInput, context);
+      } catch (error: any) {
+        return { success: false, message: error.message || 'Electron Gemini breakdown error' };
+      }
+    } else {
+      try {
+        const service = getWebGeminiService();
+        const data = await service.generateTaskBreakdown(userInput, context);
+        return { success: true, data };
+      } catch (error: any) {
+        return { success: false, message: error.message || 'Web Gemini breakdown error' };
+      }
+    }
+  },
+
+  async breakdownEnriched(userInput: string, context: TaskBreakdownContext = {}) {
+    if (isElectron()) {
+      try {
+        return await window.electronAPI.geminiBreakdownEnriched(userInput, context);
+      } catch (error: any) {
+        return { success: false, message: error.message || 'Electron Gemini enriched breakdown error' };
+      }
+    } else {
+      try {
+        const service = getWebGeminiService();
+        const data = await service.generateTaskBreakdownEnriched(userInput, context);
+        return { success: true, data };
+      } catch (error: any) {
+        return { success: false, message: error.message || 'Web Gemini enriched breakdown error' };
+      }
+    }
+  },
+
+  async breakdownTask(params: { title: string; targetCount?: number }) {
+    if (isElectron()) {
+      try {
+        return await window.electronAPI.geminiBreakdownTask(params);
+      } catch (error: any) {
+        return { success: false, message: error.message || 'Electron Gemini task breakdown error' };
+      }
+    } else {
+      try {
+        const service = getWebGeminiService();
+        const data = await service.breakdownTask(params);
+        return { success: true, data };
+      } catch (error: any) {
+        return { success: false, message: error.message || 'Web Gemini task breakdown error' };
+      }
+    }
+  },
+
+  async analyzeDependencies(tasks: Array<{ id: string; title?: string }>) {
+    if (isElectron()) {
+      try {
+        return await window.electronAPI.geminiAnalyzeDependencies(tasks);
+      } catch (error: any) {
+        return { success: false, message: error.message || 'Electron Gemini dependency analysis error' };
+      }
+    } else {
+      try {
+        const service = getWebGeminiService();
+        const data = await service.analyzeDependencies(tasks);
+        return { success: true, data };
+      } catch (error: any) {
+        return { success: false, message: error.message || 'Web Gemini dependency analysis error' };
+      }
+    }
+  }
 };
 
 // プラットフォームに応じたストレージAPI
