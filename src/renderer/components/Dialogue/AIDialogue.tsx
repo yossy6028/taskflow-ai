@@ -79,6 +79,7 @@ const AIDialogue: React.FC = () => {
   const [showSuggestions, setShowSuggestions] = useState(true)
   const [showPlanningDialog, setShowPlanningDialog] = useState(false)
   const [showProjectCreate, setShowProjectCreate] = useState(false)
+  const [suggestedProjectName, setSuggestedProjectName] = useState<string>('') // AIが提案するプロジェクト名
   const [currentUserInput, setCurrentUserInput] = useState('')
   const [editingTaskIndex, setEditingTaskIndex] = useState<number | null>(null)
   const [showTeamManager, setShowTeamManager] = useState(false)
@@ -109,6 +110,37 @@ const AIDialogue: React.FC = () => {
     { icon: Target, text: 'イベントを企画・運営したい', color: 'from-blue-400 to-cyan-500' },
     { icon: TrendingUp, text: 'ビジネスプロセスを改善したい', color: 'from-green-400 to-emerald-500' }
   ]
+
+  // ユーザーの入力からプロジェクト名を生成
+  const generateProjectName = async (userInput: string): Promise<string> => {
+    if (!userInput) return ''
+    
+    try {
+      const prompt = `
+以下のユーザーの要望から、適切なプロジェクト名を生成してください。
+プロジェクト名は具体的で分かりやすく、20文字以内にしてください。
+
+ユーザーの要望: ${userInput}
+
+プロジェクト名のみを返してください（説明は不要）。
+`
+      const response = await geminiAPI.chat(prompt)
+      if (response.success && response.data) {
+        // レスポンスから余分な記号や改行を削除
+        const cleanName = response.data
+          .replace(/[「」『』【】]/g, '')
+          .replace(/\n/g, '')
+          .trim()
+          .slice(0, 30) // 最大30文字に制限
+        return cleanName || userInput.slice(0, 20) + 'プロジェクト'
+      }
+    } catch (error) {
+      console.error('Failed to generate project name:', error)
+    }
+    
+    // フォールバック: 入力の最初の20文字を使用
+    return userInput.slice(0, 20) + 'プロジェクト'
+  }
 
   const mapGeneratedToPending = (items: GeneratedTask[]): PendingTask[] =>
     (items || []).map((t: GeneratedTask) => ({
@@ -270,6 +302,9 @@ API設定を確認するか、しばらく待ってから再度お試しくだ�
   const handleSend = async () => {
     // 会話開始一発目の送信は必ず新規プロジェクト名ヒアリングを実施（既存プロジェクトがあっても）
     if (messages.length <= 1) {
+      // 入力内容からプロジェクト名を生成
+      const suggestedName = await generateProjectName(inputValue.trim())
+      setSuggestedProjectName(suggestedName)
       setShowProjectCreate(true)
       return
     }
@@ -1072,6 +1107,7 @@ ${requirementsSummary}
         isOpen={showProjectCreate}
         onClose={() => setShowProjectCreate(false)}
         onCreate={onCreateProject}
+        suggestedName={suggestedProjectName}
       />
     </div>
   )

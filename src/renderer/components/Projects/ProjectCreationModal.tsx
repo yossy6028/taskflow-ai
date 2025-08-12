@@ -1,14 +1,22 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 
 type ProjectCreationModalProps = {
   isOpen: boolean
   onClose: () => void
   onCreate: (name: string) => void
+  suggestedName?: string // AI対話から提案されるプロジェクト名
 }
 
-const ProjectCreationModal: React.FC<ProjectCreationModalProps> = ({ isOpen, onClose, onCreate }) => {
+const ProjectCreationModal: React.FC<ProjectCreationModalProps> = ({ isOpen, onClose, onCreate, suggestedName }) => {
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
+  
+  // suggestedNameが変更されたら、nameを更新
+  useEffect(() => {
+    if (suggestedName && isOpen) {
+      setName(suggestedName)
+    }
+  }, [suggestedName, isOpen])
 
   if (!isOpen) return null
 

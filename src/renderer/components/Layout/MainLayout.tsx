@@ -450,6 +450,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
       <ProjectCreationModal
         isOpen={showProjectCreate}
         onClose={() => setShowProjectCreate(false)}
+        suggestedName="" // MainLayoutからは提案なし
         onCreate={(name: string) => {
           const id = `prj_${Date.now().toString(36)}`
           const project = {
