@@ -2,8 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import type { DBTaskRow } from '../../../shared/types';
 import { useDispatch, useSelector } from 'react-redux';
-import { setTasks, Task as ReduxTask } from '../../store/slices/tasksSlice';
-import { RootState } from '../../store';
+import { setTasks } from '../../store/slices/tasksSlice';
+import type { RootState } from '../../store';
 
 interface Props {
   isOpen: boolean;
@@ -82,6 +82,13 @@ const TaskTextImportModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
   if (!isOpen) return null;
 
+  const withTimeout = <T,>(promise: Promise<T>, ms: number, message = 'Request timed out'): Promise<T> => {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) => setTimeout(() => reject(new Error(message)), ms))
+    ])
+  }
+
   const loadParsed = () => {
     const t = parseTasksFromText(raw);
     if (t.length === 0) {
@@ -94,6 +101,7 @@ const TaskTextImportModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
   const saveAll = async () => {
     try {
+      const savePromises: Array<Promise<unknown>> = []
       for (const t of rows) {
         if (!t.title.trim()) continue;
         const s = new Date(t.startDate);
@@ -103,7 +111,7 @@ const TaskTextImportModal: React.FC<Props> = ({ isOpen, onClose }) => {
           .split(',')
           .map((v) => v.trim())
           .filter((v) => v.length > 0);
-        await window.electronAPI.dbCreateTask({
+        const payload = {
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           projectId: currentProjectId || 'default',
           title: t.title,
@@ -118,11 +126,22 @@ const TaskTextImportModal: React.FC<Props> = ({ isOpen, onClose }) => {
           status: 'pending',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-        });
+        }
+        savePromises.push(
+          withTimeout(window.electronAPI.dbCreateTask(payload), 7000).catch((e: any) => {
+            console.error('Import save failed for a task', e?.message || e)
+            return { success: false, message: e?.message || 'save failed' }
+          })
+        )
       }
-      const res = await window.electronAPI.dbGetTasks({ projectId: currentProjectId || 'default' });
-      if (res.success && res.data) {
-        const mapped: ReduxTask[] = res.data.map((row: DBTaskRow) => ({
+
+      if (savePromises.length > 0) {
+        await Promise.allSettled(savePromises)
+      }
+
+      const res = await withTimeout(window.electronAPI.dbGetTasks({ projectId: currentProjectId || 'default' }), 10000).catch(() => null)
+      if (res && (res as any).success && (res as any).data) {
+        const mapped = (res as any).data.map((row: DBTaskRow) => ({
           id: row.id,
           projectId: (row as any).project_id || 'default',
           title: row.title,
@@ -158,73 +177,43 @@ const TaskTextImportModal: React.FC<Props> = ({ isOpen, onClose }) => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4">
-          <div className="space-y-2">
-            <label className="text-sm text-neutral-600 dark:text-neutral-300">テキスト（貼り付け）</label>
+          {/* left */}
+          <div className="space-y-3">
             <textarea
               value={raw}
               onChange={(e) => setRaw(e.target.value)}
-              className="w-full h-64 p-3 rounded border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900"
-              placeholder="箇条書きのタスクと日付（例: * タスク1：... (8/20-8/30)）を貼り付けてください"
+              placeholder="タスクタイトル | 2025-09-01 | 2025-09-03 | medium | 2h | 担当A | tag1, tag2"
+              className="w-full h-72 p-3 border rounded-md bg-white/60 dark:bg-neutral-800/60"
             />
-            <button onClick={loadParsed} className="btn btn-gradient">取り込む</button>
-            {error && <p className="text-sm text-red-600 mt-1">{error}</p>}
-            <div className="text-xs text-neutral-500">
-              先読みプレビュー（自動解析）
-              <ul className="list-disc list-inside">
-                {parsedPreview.slice(0, 5).map((t, i) => (
-                  <li key={i}>{t.title} ({t.startDate} - {t.endDate})</li>
-                ))}
-              </ul>
+            <div className="flex items-center gap-2">
+              <button onClick={loadParsed} className="btn btn-primary">プレビュー</button>
+              {error && <span className="text-red-500 text-sm">{error}</span>}
             </div>
           </div>
 
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="font-medium">編集・微調整</h4>
-              <button
-                onClick={() => setRows((prev) => ([...prev, {
-                  title: '', description: '', startDate: new Date().toISOString().slice(0,10), endDate: new Date().toISOString().slice(0,10), estimatedHours: 1, priority: 'medium', assignee: '', tags: ''
-                }]))}
-                className="text-sm text-primary-600 hover:text-primary-700"
-              >
-                ＋ タスク追加
-              </button>
-            </div>
-            <div className="max-h-80 overflow-y-auto space-y-3">
-              {rows.map((t, i) => (
-                <div key={i} className="p-3 rounded border border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <input className="px-3 py-2 rounded border bg-white dark:bg-neutral-900" placeholder="タイトル" value={t.title} onChange={(e) => setRows(prev => prev.map((pt, idx) => idx===i?{...pt, title: e.target.value}:pt))} />
-                    <input className="px-3 py-2 rounded border bg-white dark:bg-neutral-900" placeholder="担当" value={t.assignee ?? ''} onChange={(e) => setRows(prev => prev.map((pt, idx) => idx===i?{...pt, assignee: e.target.value}:pt))} />
-                    <textarea className="sm:col-span-2 px-3 py-2 rounded border bg-white dark:bg-neutral-900" placeholder="説明" value={t.description} onChange={(e) => setRows(prev => prev.map((pt, idx) => idx===i?{...pt, description: e.target.value}:pt))} />
-                    <label className="flex items-center gap-2"><span className="w-16 text-sm">開始日</span><input type="date" className="flex-1 px-3 py-2 rounded border bg-white dark:bg-neutral-900" value={t.startDate} onChange={(e)=>setRows(prev=>prev.map((pt,idx)=>idx===i?{...pt, startDate: e.target.value}:pt))} /></label>
-                    <label className="flex items-center gap-2"><span className="w-16 text-sm">終了日</span><input type="date" className="flex-1 px-3 py-2 rounded border bg-white dark:bg-neutral-900" value={t.endDate} onChange={(e)=>setRows(prev=>prev.map((pt,idx)=>idx===i?{...pt, endDate: e.target.value}:pt))} /></label>
-                    <label className="flex items-center gap-2"><span className="w-16 text-sm">工数</span><input type="number" min={0} step={0.5} className="flex-1 px-3 py-2 rounded border bg-white dark:bg-neutral-900" value={t.estimatedHours} onChange={(e)=>setRows(prev=>prev.map((pt,idx)=>idx===i?{...pt, estimatedHours: Number(e.target.value) || 0}:pt))} /></label>
-                    <label className="flex items-center gap-2"><span className="w-16 text-sm">優先度</span><select className="flex-1 px-3 py-2 rounded border bg-white dark:bg-neutral-900" value={t.priority} onChange={(e)=>setRows(prev=>prev.map((pt,idx)=>idx===i?{...pt, priority: e.target.value as PendingTask['priority']}:pt))}>
-                      <option value="low">low</option>
-                      <option value="medium">medium</option>
-                      <option value="high">high</option>
-                    </select></label>
-                    <input className="sm:col-span-2 px-3 py-2 rounded border bg-white dark:bg-neutral-900" placeholder="タグ (comma, separated)" value={t.tags ?? ''} onChange={(e)=>setRows(prev=>prev.map((pt,idx)=>idx===i?{...pt, tags: e.target.value}:pt))} />
-                  </div>
-                  <div className="flex justify-end mt-2">
-                    <button className="text-sm text-red-600 hover:text-red-700" onClick={()=>setRows(prev=>prev.filter((_,idx)=>idx!==i))}>このタスクを削除</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="flex justify-end gap-2">
-              <button onClick={onClose} className="btn btn-glass">キャンセル</button>
-              <button onClick={saveAll} className="btn btn-gradient">承認してタスク化</button>
-            </div>
+          {/* right */}
+          <div className="space-y-2 max-h-80 overflow-auto pr-2">
+            {parsedPreview.map((t, i) => (
+              <div key={i} className="p-2 border rounded-md text-sm">
+                <div className="font-medium">{t.title}</div>
+                <div className="text-neutral-500">{t.startDate} → {t.endDate} / {t.priority} / {t.estimatedHours ?? 1}h</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-4 border-t border-neutral-200 dark:border-neutral-800">
+          <div className="flex justify-end gap-2">
+            <button onClick={onClose} className="btn btn-glass">キャンセル</button>
+            <button onClick={saveAll} className="btn btn-gradient">承認してタスク化</button>
           </div>
         </div>
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default TaskTextImportModal;
+export default TaskTextImportModal
 
 
 

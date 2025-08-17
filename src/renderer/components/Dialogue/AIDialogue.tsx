@@ -573,21 +573,28 @@ ${requirementsSummary}
     inputRef.current?.focus()
   }
 
+  const withTimeout = <T,>(promise: Promise<T>, ms: number, message = 'Request timed out'): Promise<T> => {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) => setTimeout(() => reject(new Error(message)), ms))
+    ])
+  }
+
   const acceptTasks = async () => {
     if (isApproving) return
     setIsApproving(true)
     try {
-      // プラットフォーム統一APIを使用
       const { storage } = await import('../../utils/platform')
-      
-      // 既存タスクを取得して重複を事前にスキップ（ゆるい類似判定）
-      const existing = await storage.getTasks(currentProjectId || 'default')
+
+      const existing = await withTimeout(storage.getTasks(currentProjectId || 'default'), 10000)
       type ExistingKey = { titleNorm: string; assignee: string; startDay: string; endDay: string }
       const existingList: ExistingKey[] = []
-      if (existing.success && existing.data) {
-        for (const row of existing.data) {
-          const startDay = new Date(row.startDate || row.start_date).toISOString().slice(0,10)
-          const endDay = new Date(row.endDate || row.end_date).toISOString().slice(0,10)
+      if ((existing as any).success && (existing as any).data) {
+        for (const row of (existing as any).data) {
+          const s = row.startDate || row.start_date
+          const e = row.endDate || row.end_date
+          const startDay = new Date(s).toISOString().slice(0,10)
+          const endDay = new Date(e).toISOString().slice(0,10)
           existingList.push({
             titleNorm: normalizeText(row.title || ''),
             assignee: (row.assignee || '').trim(),
@@ -602,8 +609,9 @@ ${requirementsSummary}
         .filter(pt => pt.title && pt.startDate && pt.endDate)
         .map(pt => ({ ...pt }))
 
+      const savePromises: Array<Promise<unknown>> = []
+
       for (const t of toCreate) {
-        // 入力検証（簡易）
         if (!t.title.trim()) continue
         const start = new Date(t.startDate)
         const end = new Date(t.endDate)
@@ -612,8 +620,7 @@ ${requirementsSummary}
           .split(',')
           .map(s => s.trim())
           .filter(s => s.length > 0)
-        
-        // 拡張データをdescriptionに含める（暫定的な実装）
+
         const extendedDescription = [
           t.description,
           t.content ? `\n【詳細内容】\n${t.content}` : '',
@@ -622,8 +629,7 @@ ${requirementsSummary}
           t.risks?.length ? `\n【リスク】\n${t.risks.map(r => `- ${r}`).join('\n')}` : '',
           t.notes ? `\n【備考】\n${t.notes}` : ''
         ].filter(s => s).join('')
-        
-        // 既存・同バッチ重複のスキップ（類似タイトル/担当/日付で判定）
+
         const startDay = start.toISOString().slice(0,10)
         const endDay = end.toISOString().slice(0,10)
         const assignee = (t.assignee || '').trim()
@@ -634,6 +640,7 @@ ${requirementsSummary}
         )
         const batchKey = `${titleNorm}__${assignee}__${startDay}__${endDay}`
         if (dupInExisting || createdKeys.has(batchKey)) continue
+        createdKeys.add(batchKey)
 
         const taskData = {
           id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
@@ -653,20 +660,22 @@ ${requirementsSummary}
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         }
-        
-        console.log('Saving task:', taskData)
-        const saveResult = await storage.saveTask(taskData)
-        console.log('Save result:', saveResult)
 
-        createdKeys.add(batchKey)
+        savePromises.push(
+          withTimeout(storage.saveTask(taskData), 7000).catch((e: any) => {
+            console.error('Save task failed:', e?.message || e)
+            return { success: false, message: e?.message || 'save failed' }
+          })
+        )
       }
 
-      // 追加: 承認後にDBから最新のタスクを取得してReduxへ反映
-      console.log('Getting tasks for project:', currentProjectId || 'default')
-      const res = await storage.getTasks(currentProjectId || 'default')
-      console.log('Got tasks:', res)
-      if (res.success && res.data) {
-        const mapped: ReduxTask[] = res.data.map((row: any) => ({
+      if (savePromises.length > 0) {
+        await Promise.allSettled(savePromises)
+      }
+
+      const res = await withTimeout(storage.getTasks(currentProjectId || 'default'), 10000).catch(() => null)
+      if (res && (res as any).success && (res as any).data) {
+        const mapped = (res as any).data.map((row: any) => ({
           id: row.id,
           projectId: row.projectId || (row as any).project_id || 'default',
           title: row.title,
