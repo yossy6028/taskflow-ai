@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import type { TaskBreakdownContext } from '../../shared/types';
 
 // Gemini API設定
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
@@ -6,16 +7,6 @@ const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
 // デバッグ情報
 if (import.meta.env.DEV) {
   console.log('Gemini API Key configured:', API_KEY ? 'Yes' : 'No');
-}
-
-// タスク分解のコンテキスト
-export interface TaskBreakdownContext {
-  projectName?: string;
-  projectDescription?: string;
-  existingTasks?: string[];
-  userRole?: string;
-  deadline?: string;
-  additionalContext?: string;
 }
 
 class GeminiService {
@@ -105,7 +96,7 @@ class GeminiService {
     {
       "title": "サブタスクのタイトル",
       "description": "サブタスクの説明",
-      "estimatedHours": 推定時間（数値）,
+      "estimatedHours": 推定時間（数値）, 
       "priority": "high/medium/low"
     }
   ]
@@ -146,7 +137,7 @@ class GeminiService {
     {
       "title": "サブタスクのタイトル",
       "description": "サブタスクの説明",
-      "estimatedHours": 推定時間（数値）,
+      "estimatedHours": 推定時間（数値）, 
       "priority": "high/medium/low"
     }
   ]
@@ -239,7 +230,7 @@ ${taskList}
     {
       "title": "タスクのタイトル",
       "description": "タスクの詳細説明",
-      "estimatedHours": 推定時間（数値）,
+      "estimatedHours": 推定時間（数値）, 
       "priority": "high/medium/low",
       "dependencies": [],
       "startDate": "YYYY-MM-DD",

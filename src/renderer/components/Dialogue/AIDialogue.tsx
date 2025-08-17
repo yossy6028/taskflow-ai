@@ -125,9 +125,9 @@ const AIDialogue: React.FC = () => {
 プロジェクト名のみを返してください（説明は不要）。
 `
       const response = await geminiAPI.chat(prompt)
-      if (response.success && response.data) {
+      if (response.success && response.message) {
         // レスポンスから余分な記号や改行を削除
-        const cleanName = response.data
+        const cleanName = response.message
           .replace(/[「」『』【】]/g, '')
           .replace(/\n/g, '')
           .trim()
@@ -584,13 +584,13 @@ ${requirementsSummary}
       const existing = await storage.getTasks(currentProjectId || 'default')
       type ExistingKey = { titleNorm: string; assignee: string; startDay: string; endDay: string }
       const existingList: ExistingKey[] = []
-      if (existing.success && existing.data) {
-        for (const row of existing.data) {
-          const startDay = new Date(row.startDate || row.start_date).toISOString().slice(0,10)
-          const endDay = new Date(row.endDate || row.end_date).toISOString().slice(0,10)
+      if (existing.success && Array.isArray(existing.data)) {
+        for (const row of existing.data as any[]) {
+          const startDay = new Date((row as any).startDate || (row as any).start_date).toISOString().slice(0,10)
+          const endDay = new Date((row as any).endDate || (row as any).end_date).toISOString().slice(0,10)
           existingList.push({
-            titleNorm: normalizeText(row.title || ''),
-            assignee: (row.assignee || '').trim(),
+            titleNorm: normalizeText((row as any).title || ''),
+            assignee: (((row as any).assignee || '') as string).trim(),
             startDay,
             endDay
           })
