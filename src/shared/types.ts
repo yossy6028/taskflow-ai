@@ -6,11 +6,18 @@ export interface ConversationMessage {
 }
 
 export interface TaskBreakdownContext {
+  // Basic fields
   industry?: string;
   deadline?: string;
   priority?: 'low' | 'medium' | 'high';
   resources?: string[];
   projectName?: string;
+
+  // Extended fields (used by web Gemini service)
+  projectDescription?: string;
+  existingTasks?: string[];
+  userRole?: string;
+  additionalContext?: string;
 }
 
 export interface GeneratedTask {
@@ -88,7 +95,7 @@ export interface ElectronAPI {
     Promise<{ success: boolean; message: string }>;
   geminiBreakdown: (userInput: string, context?: TaskBreakdownContext) => 
     Promise<{ success: boolean; data?: TaskBreakdownResult; message?: string }>;
-  geminiAnalyzeDependencies: (tasks: Task[]) => 
+  geminiAnalyzeDependencies: (tasks: Array<Pick<Task, 'id' | 'title' | 'dependencies'>>) => 
     Promise<{ success: boolean; data?: DependencyAnalysis; message?: string }>;
   geminiBreakdownEnriched: (userInput: string, context?: TaskBreakdownContext) =>
     Promise<{ success: boolean; data?: TaskBreakdownResult; message?: string }>;

@@ -1,11 +1,12 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, type FirebaseApp } from 'firebase/app';
 import { 
   getAuth, 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
-  User
+  User,
+  type Auth
 } from 'firebase/auth';
 import { 
   getDatabase, 
@@ -16,7 +17,8 @@ import {
   onValue, 
   off,
   update,
-  remove 
+  remove, 
+  type Database
 } from 'firebase/database';
 
 // Firebase設定（環境変数から読み込み、フォールバック付き）
@@ -39,9 +41,9 @@ if ((import.meta as any).env?.DEV) {
 }
 
 // Firebase初期化
-let app;
-let auth;
-let database;
+let app: FirebaseApp | null;
+let auth: Auth | null;
+let database: Database | null;
 
 try {
   app = initializeApp(firebaseConfig);
@@ -50,9 +52,9 @@ try {
 } catch (error) {
   console.error('Firebase initialization error:', error);
   // フォールバック設定
-  app = null as any;
-  auth = null as any;
-  database = null as any;
+  app = null;
+  auth = null;
+  database = null;
 }
 
 export { auth, database };
@@ -113,7 +115,7 @@ export const firebaseDB = {
   // タスクの保存
   saveTask: async (userId: string, task: any) => {
     try {
-      const taskRef = ref(database, `users/${userId}/tasks/${task.id}`);
+      const taskRef = ref(database as Database, `users/${userId}/tasks/${task.id}`);
       await set(taskRef, {
         ...task,
         updatedAt: Date.now()
@@ -127,7 +129,7 @@ export const firebaseDB = {
   // タスクの取得
   getTasks: async (userId: string) => {
     try {
-      const tasksRef = ref(database, `users/${userId}/tasks`);
+      const tasksRef = ref(database as Database, `users/${userId}/tasks`);
       const snapshot = await get(tasksRef);
       if (snapshot.exists()) {
         return { success: true, data: snapshot.val() };
@@ -140,7 +142,7 @@ export const firebaseDB = {
 
   // リアルタイムリスナー
   subscribeToTasks: (userId: string, callback: (tasks: any) => void) => {
-    const tasksRef = ref(database, `users/${userId}/tasks`);
+    const tasksRef = ref(database as Database, `users/${userId}/tasks`);
     onValue(tasksRef, (snapshot) => {
       const data = snapshot.val() || {};
       callback(data);
@@ -151,7 +153,7 @@ export const firebaseDB = {
   // タスクの削除
   deleteTask: async (userId: string, taskId: string) => {
     try {
-      const taskRef = ref(database, `users/${userId}/tasks/${taskId}`);
+      const taskRef = ref(database as Database, `users/${userId}/tasks/${taskId}`);
       await remove(taskRef);
       return { success: true };
     } catch (error: any) {
@@ -162,7 +164,7 @@ export const firebaseDB = {
   // プロジェクトの保存
   saveProject: async (userId: string, project: any) => {
     try {
-      const projectRef = ref(database, `users/${userId}/projects/${project.id}`);
+      const projectRef = ref(database as Database, `users/${userId}/projects/${project.id}`);
       await set(projectRef, {
         ...project,
         updatedAt: Date.now()
@@ -176,7 +178,7 @@ export const firebaseDB = {
   // プロジェクトの取得
   getProjects: async (userId: string) => {
     try {
-      const projectsRef = ref(database, `users/${userId}/projects`);
+      const projectsRef = ref(database as Database, `users/${userId}/projects`);
       const snapshot = await get(projectsRef);
       if (snapshot.exists()) {
         return { success: true, data: snapshot.val() };
@@ -190,7 +192,7 @@ export const firebaseDB = {
   // チャットメッセージの保存
   saveChatMessage: async (userId: string, conversationId: string, message: any) => {
     try {
-      const messageRef = push(ref(database, `users/${userId}/conversations/${conversationId}/messages`));
+      const messageRef = push(ref(database as Database, `users/${userId}/conversations/${conversationId}/messages`));
       await set(messageRef, {
         ...message,
         timestamp: Date.now()
@@ -204,7 +206,7 @@ export const firebaseDB = {
   // チャット履歴の取得
   getChatHistory: async (userId: string, conversationId: string) => {
     try {
-      const messagesRef = ref(database, `users/${userId}/conversations/${conversationId}/messages`);
+      const messagesRef = ref(database as Database, `users/${userId}/conversations/${conversationId}/messages`);
       const snapshot = await get(messagesRef);
       if (snapshot.exists()) {
         return { success: true, data: snapshot.val() };
@@ -237,7 +239,7 @@ export const syncWithFirebase = {
         });
       }
       
-      await update(ref(database), updates);
+      await update(ref(database as Database), updates);
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -247,7 +249,7 @@ export const syncWithFirebase = {
   // Firebaseからローカルにデータを取得
   downloadCloudData: async (userId: string) => {
     try {
-      const userRef = ref(database, `users/${userId}`);
+      const userRef = ref(database as Database, `users/${userId}`);
       const snapshot = await get(userRef);
       if (snapshot.exists()) {
         return { success: true, data: snapshot.val() };
