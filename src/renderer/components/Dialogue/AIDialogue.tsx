@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { geminiAPI } from '../../utils/platform'
+import { geminiAPI, storage, isElectron, isWeb } from '../../utils/platform'
 import { setTasks, Task as ReduxTask } from '../../store/slices/tasksSlice'
 import { addProject, setCurrentProject } from '../../store/slices/projectsSlice'
 import { setTeamMembers } from '../../store/slices/teamSlice'
@@ -219,17 +219,41 @@ const AIDialogue: React.FC = () => {
 
   // 会話から要約入力を生成して、AIの構造化タスクへ変換
   const handleGenerateFromConversation = async () => {
+    if (isTyping) {
+      console.warn('Generation already in progress, ignoring duplicate request')
+      return
+    }
+
+    console.log('Starting task generation from conversation')
+    setShowSuggestions(false)
+    setIsTyping(true)
+
     try {
-      setShowSuggestions(false)
-      setIsTyping(true)
       const combined = messages
         .map(m => `${m.type === 'user' ? 'ユーザー' : 'AI'}: ${m.content}`)
         .join('\n')
         .slice(-8000) // 安全のため制限
-      
-      const res = await geminiAPI.breakdownEnriched(combined, { priority: 'medium' })
+
+      console.log(`Processing conversation with ${combined.length} characters`)
+
+      // プラットフォームに応じたタイムアウト付きでAPI呼び出し
+      const apiTimeoutMs = isElectron() ? 30000 : 45000 // PC: 30秒, スマホ: 45秒
+      const withTimeout = async <T,>(p: Promise<T>): Promise<T> => {
+        return Promise.race([
+          p,
+          new Promise<T>((_, reject) =>
+            setTimeout(() => reject(new Error(`API request timeout after ${apiTimeoutMs}ms on ${isWeb() ? 'mobile' : 'desktop'}`)), apiTimeoutMs)
+          )
+        ])
+      }
+
+      const res = await withTimeout(
+        geminiAPI.breakdownEnriched(combined, { priority: 'medium' })
+      )
+
       if (res.success && res.data) {
         const tasks = dedupePendingTasks(mapGeneratedToPending(res.data.tasks || []))
+        console.log(`Generated ${tasks.length} tasks from conversation`)
         if (tasks.length > 0) {
           setPendingTasks(tasks)
           setShowReview(true)
@@ -237,6 +261,7 @@ const AIDialogue: React.FC = () => {
         }
       } else if (res.message) {
         // APIエラーメッセージを表示
+        console.error('Enriched breakdown failed:', res.message)
         setMessages(prev => [...prev, {
           id: (Date.now() + 0.1).toString(),
           type: 'ai',
@@ -247,17 +272,23 @@ API設定を確認するか、しばらく待ってから再度お試しくだ�
         }])
         return
       }
-      
+
       // フォールバック: 通常の分解を試行
-      const fb = await geminiAPI.breakdown(combined, { priority: 'medium' })
+      console.log('Trying fallback breakdown method')
+      const fb = await withTimeout(
+        geminiAPI.breakdown(combined, { priority: 'medium' })
+      )
+
       if (fb.success && fb.data) {
         const tasks = dedupePendingTasks(mapGeneratedToPending(fb.data.tasks || []))
+        console.log(`Fallback generated ${tasks.length} tasks from conversation`)
         if (tasks.length > 0) {
           setPendingTasks(tasks)
           setShowReview(true)
           return
         }
       } else if (fb.message) {
+        console.error('Fallback breakdown failed:', fb.message)
         setMessages(prev => [...prev, {
           id: (Date.now() + 0.2).toString(),
           type: 'ai',
@@ -266,8 +297,9 @@ API設定を確認するか、しばらく待ってから再度お試しくだ�
         }])
         return
       }
-      
+
       // 両方失敗した場合
+      console.error('Both breakdown methods failed')
       setMessages(prev => [...prev, {
         id: (Date.now() + 0.3).toString(),
         type: 'ai',
@@ -275,14 +307,16 @@ API設定を確認するか、しばらく待ってから再度お試しくだ�
         timestamp: new Date(),
       }])
     } catch (e: any) {
-      console.error('Generate from conversation failed', e)
+      const errorMsg = e.message || 'Unknown error'
+      console.error('Generate from conversation failed:', e)
       setMessages(prev => [...prev, {
         id: (Date.now() + 0.4).toString(),
         type: 'ai',
-        content: `予期しないエラーが発生しました: ${e.message || 'Unknown error'}`,
+        content: `予期しないエラーが発生しました: ${errorMsg}`,
         timestamp: new Date(),
       }])
     } finally {
+      console.log('Task generation from conversation completed')
       setIsTyping(false)
     }
   }
@@ -384,9 +418,15 @@ API設定を確認するか、しばらく待ってから再度お試しくだ�
   }
 
   const handlePlanningConfirm = async (requirements: any) => {
+    if (isTyping) {
+      console.warn('Planning confirmation already in progress, ignoring duplicate request')
+      return
+    }
+
+    console.log('Starting planning confirmation with requirements:', requirements)
     setShowPlanningDialog(false)
     setIsTyping(true)
-    
+
     // 要件をメッセージとして追加
     const requirementsSummary = `
 タスク計画の詳細:
@@ -401,7 +441,7 @@ ${requirements.constraints?.length > 0 ? `- 制約: ${requirements.constraints.j
 ${requirements.teamMembers?.length > 0 ? `- チーム: ${requirements.teamMembers.join(', ')}` : ''}
 ${requirements.checkCalendar ? '- Googleカレンダー連携: 有効' : ''}
     `.trim()
-    
+
     setMessages(prev => [...prev, {
       id: Date.now().toString(),
       type: 'user',
@@ -421,22 +461,47 @@ ${currentUserInput}
 ${requirementsSummary}
     `.trim()
 
+    // プラットフォームに応じたタイムアウト付きで処理を実行
+    const apiTimeoutMs = isElectron() ? 30000 : 45000 // PC: 30秒, スマホ: 45秒
+    const withTimeout = async <T,>(p: Promise<T>, operation: string): Promise<T> => {
+      try {
+        console.log(`Starting ${operation} with ${apiTimeoutMs}ms timeout on ${isWeb() ? 'mobile' : 'desktop'}`)
+        return await Promise.race([
+          p,
+          new Promise<T>((_, reject) =>
+            setTimeout(() => reject(new Error(`${operation} timeout after ${apiTimeoutMs}ms on ${isWeb() ? 'mobile' : 'desktop'}`)), apiTimeoutMs)
+          )
+        ])
+      } catch (error) {
+        console.error(`${operation} failed:`, error)
+        throw error
+      }
+    }
+
     setTimeout(async () => {
       try {
+        console.log('Starting enriched breakdown for planning confirmation')
+
         // 詳細補完込みでドラフト生成
-        const result = await geminiAPI.breakdownEnriched(enrichedInput, { 
-          priority: requirements.priority || 'medium' as const,
-          projectName: currentProject?.name || undefined
-        })
+        const result = await withTimeout(
+          geminiAPI.breakdownEnriched(enrichedInput, {
+            priority: requirements.priority || 'medium' as const,
+            projectName: currentProject?.name || undefined
+          }),
+          'enriched breakdown'
+        )
+
         if (result.success && result.data && Array.isArray(result.data.tasks) && result.data.tasks.length > 0) {
           let tasks: PendingTask[] = dedupePendingTasks(mapGeneratedToPending(result.data.tasks || []))
-          
+          console.log(`Generated ${tasks.length} tasks from planning requirements`)
+
           // Googleカレンダー連携とスケジューリング
           if (requirements.checkCalendar && requirements.goalDate && tasks.length > 0) {
             try {
+              console.log('Processing calendar integration and scheduling')
               // TODO: 実際のカレンダーイベントを取得する処理を追加
               const mockEvents: ScheduleEvent[] = []
-              
+
               // TaskSchedulerを使用してスケジューリング
               const scheduler = new TaskScheduler(mockEvents)
               const taskRequirements: TaskRequirement[] = tasks.map(t => ({
@@ -445,14 +510,14 @@ ${requirementsSummary}
                 priority: t.priority,
                 dependencies: []
               }))
-              
+
               const goalDate = new Date(requirements.goalDate)
               const scheduledTasks = scheduler.scheduleTasksFromGoal(
                 goalDate,
                 taskRequirements,
                 new Date()
               )
-              
+
               // スケジュール結果をタスクに反映
               tasks = tasks.map((task, index) => {
                 const scheduled = scheduledTasks[index]
@@ -465,10 +530,10 @@ ${requirementsSummary}
                 }
                 return task
               })
-              
+
               // スケジュールサマリーを生成
               const summary = scheduler.generateScheduleSummary(scheduledTasks)
-              
+
               setMessages(prev => [...prev, {
                 id: (Date.now() + 0.5).toString(),
                 type: 'ai',
@@ -477,18 +542,20 @@ ${requirementsSummary}
               }])
             } catch (error) {
               console.error('Scheduling failed:', error)
+              // スケジューリング失敗時は続行
             }
           }
-          
+
           // 担当者の割り当て
           if (requirements.teamMembers?.length > 0 && tasks.length > 0) {
+            console.log(`Assigning team members to ${tasks.length} tasks`)
             tasks.forEach((task, index) => {
               if (!task.assignee && requirements.teamMembers.length > 0) {
                 task.assignee = requirements.teamMembers[index % requirements.teamMembers.length]
               }
             })
           }
-          
+
           if (tasks.length > 0) {
             setPendingTasks(tasks)
             setShowReview(true)
@@ -503,13 +570,18 @@ ${requirementsSummary}
         }
 
         // フォールバック（上で1件も出なかった場合のみ）
-        const fb = await geminiAPI.breakdown(enrichedInput, { 
-          priority: requirements.priority || 'medium' as const,
-          projectName: currentProject?.name || undefined
-        })
+        console.log('Trying fallback breakdown method')
+        const fb = await withTimeout(
+          geminiAPI.breakdown(enrichedInput, {
+            priority: requirements.priority || 'medium' as const,
+            projectName: currentProject?.name || undefined
+          }),
+          'fallback breakdown'
+        )
+
         if (fb.success && fb.data && (!result.data || !Array.isArray(result.data.tasks) || result.data.tasks.length === 0)) {
           const tasks: PendingTask[] = dedupePendingTasks(mapGeneratedToPending(fb.data.tasks || []))
-          
+
           // 担当者の割り当て
           if (requirements.teamMembers?.length > 0 && tasks.length > 0) {
             tasks.forEach((task, index) => {
@@ -518,8 +590,9 @@ ${requirementsSummary}
               }
             })
           }
-          
+
           if (tasks.length > 0) {
+            console.log(`Fallback generated ${tasks.length} tasks`)
             setPendingTasks(tasks)
             setShowReview(true)
             setMessages(prev => [...prev, {
@@ -531,9 +604,10 @@ ${requirementsSummary}
             return
           }
         }
-        
+
         // 生成失敗時のエラーメッセージ改善
         const errorMsg = result.message || fb.message || '不明なエラー'
+        console.error('Both breakdown methods failed:', errorMsg)
         setMessages(prev => [...prev, {
           id: (Date.now() + 1).toString(),
           type: 'ai',
@@ -546,16 +620,18 @@ ${requirementsSummary}
           timestamp: new Date(),
         }])
       } catch (err: any) {
-        console.error('Task generation failed', err)
+        const errorMsg = err.message || 'Unknown error'
+        console.error('Task generation failed:', err)
         setMessages(prev => [...prev, {
           id: (Date.now() + 1).toString(),
           type: 'ai',
-          content: `システムエラーが発生しました: ${err.message || 'Unknown error'}
+          content: `システムエラーが発生しました: ${errorMsg}
 
 しばらく待ってから再度お試しください。問題が続く場合はサポートにお問い合わせください。`,
           timestamp: new Date(),
         }])
       } finally {
+        console.log('Planning confirmation process completed')
         setIsTyping(false)
       }
     }, 1000)
@@ -574,27 +650,157 @@ ${requirementsSummary}
   }
 
   const acceptTasks = async () => {
-    if (isApproving) return
+    console.log('🔄 === TASK ACCEPTANCE START ===')
+    console.log('Timestamp:', new Date().toISOString())
+    console.log('Platform:', isElectron() ? 'Electron' : 'Web')
+    console.log('Pending tasks count:', pendingTasks.length)
+
+    if (isApproving) {
+      console.warn('⚠️ Task acceptance already in progress, ignoring duplicate request')
+      console.log('🔄 === TASK ACCEPTANCE END (DUPLICATE) ===')
+      return
+    }
+
+    console.log('✅ Starting task acceptance process')
+    console.log('Setting isApproving to true')
     setIsApproving(true)
+    console.log('isApproving state set successfully')
+
+    // 状態管理用の変数
+    let timeoutId: NodeJS.Timeout | null = null
+    let isCompleted = false
+
+    // 確実に状態をリセットするヘルパー関数
+    const resetState = (success: boolean = false, error?: string) => {
+      console.log('🔄 === RESET STATE CALLED ===')
+      console.log('Success:', success)
+      console.log('Error:', error)
+      console.log('isCompleted before:', isCompleted)
+
+      if (isCompleted) {
+        console.log('⚠️ Already completed, skipping resetState')
+        return // 既に完了済みなら何もしない
+      }
+
+      isCompleted = true
+      console.log(`✅ Task acceptance ${success ? 'completed successfully' : 'failed'}`)
+
+      // タイムアウトをクリア
+      if (timeoutId) {
+        console.log('Clearing timeout')
+        clearTimeout(timeoutId)
+        timeoutId = null
+      } else {
+        console.log('No timeout to clear')
+      }
+
+      console.log('Resetting UI state...')
+      setShowReview(false)
+      setPendingTasks([])
+      setIsApproving(false)
+      // 念のため強制的にボタン文言を戻すために微小遅延後に再評価
+      setTimeout(() => {
+        console.log('🔁 Ensuring isApproving=false after reset')
+        setIsApproving(false)
+      }, 0)
+      console.log('UI state reset completed')
+
+      // エラーがあった場合の処理
+      if (error) {
+        console.error('📝 Adding error message to chat')
+        console.error('Task acceptance error:', error)
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          type: 'ai',
+          content: `❌ タスクの作成中にエラーが発生しました: ${error}`,
+          timestamp: new Date(),
+          reactions: []
+        }])
+        console.log('Error message added to chat')
+      }
+
+      console.log('🔄 === RESET STATE END ===')
+    }
+
+    // プラットフォームに応じたタイムアウト処理を設定
+    const timeoutMs = isElectron() ? 15000 : 30000; // PC: 15秒, スマホ: 30秒
+    timeoutId = setTimeout(() => {
+      console.error(`Task acceptance timed out after ${timeoutMs}ms on ${isElectron() ? 'desktop' : 'mobile'}`)
+      resetState(false, '処理がタイムアウトしました。ネットワーク接続を確認して、もう一度お試しください。')
+    }, timeoutMs)
+
+    // プラットフォームに応じたタイムアウト処理のヘルパー
+    const getOperationTimeout = (operation: string): number => {
+      const isWebPlatform = isWeb()
+      switch (operation) {
+        case 'get existing tasks':
+          return isWebPlatform ? 10000 : 5000 // Firebaseは少し時間がかかる
+        case 'save task':
+          return isWebPlatform ? 15000 : 10000 // Firebaseの書き込みは遅い場合がある
+        case 'fetch updated tasks':
+          return isWebPlatform ? 12000 : 5000
+        default:
+          return isWebPlatform ? 12000 : 8000
+      }
+    }
+
+    // 個々の非同期処理を確実にタイムアウトさせるヘルパー
+    const withTimeout = async <T,>(p: Promise<T>, operation: string): Promise<T> => {
+      const timeoutMs = getOperationTimeout(operation)
+      try {
+        console.log(`Starting ${operation} with ${timeoutMs}ms timeout`)
+        return await Promise.race([
+          p,
+          new Promise<T>((_, reject) =>
+            setTimeout(() => reject(new Error(`${operation} timeout after ${timeoutMs}ms on ${isWeb() ? 'mobile' : 'desktop'}`)), timeoutMs)
+          )
+        ])
+      } catch (error) {
+        console.error(`${operation} failed:`, error)
+        throw error
+      }
+    }
+
     try {
       // プラットフォーム統一APIを使用
       const { storage } = await import('../../utils/platform')
-      
+
       // 既存タスクを取得して重複を事前にスキップ（ゆるい類似判定）
-      const existing = await storage.getTasks(currentProjectId || 'default')
-      type ExistingKey = { titleNorm: string; assignee: string; startDay: string; endDay: string }
-      const existingList: ExistingKey[] = []
-      if (existing.success && existing.data) {
-        for (const row of existing.data) {
-          const startDay = new Date(row.startDate || row.start_date).toISOString().slice(0,10)
-          const endDay = new Date(row.endDate || row.end_date).toISOString().slice(0,10)
-          existingList.push({
-            titleNorm: normalizeText(row.title || ''),
-            assignee: (row.assignee || '').trim(),
-            startDay,
-            endDay
-          })
+      let existingList: Array<{ titleNorm: string; assignee: string; startDay: string; endDay: string }> = []
+
+      try {
+        console.log('📋 Fetching existing tasks for duplicate check')
+        console.log('Project ID:', currentProjectId || 'default')
+
+        const existing = await withTimeout(
+          storage.getTasks(currentProjectId || 'default'),
+          'get existing tasks'
+        )
+
+        console.log('Existing tasks result:', existing)
+
+        if (existing.success && existing.data) {
+          console.log(`Processing ${existing.data.length} existing tasks`)
+          for (let i = 0; i < existing.data.length; i++) {
+            const row = existing.data[i];
+            console.log(`Processing existing task ${i + 1}:`, row.title)
+
+            const startDay = new Date(row.startDate || row.start_date).toISOString().slice(0,10)
+            const endDay = new Date(row.endDate || row.end_date).toISOString().slice(0,10)
+            existingList.push({
+              titleNorm: normalizeText(row.title || ''),
+              assignee: (row.assignee || '').trim(),
+              startDay,
+              endDay
+            })
+          }
+          console.log(`✅ Found ${existingList.length} existing tasks for duplicate check`)
+        } else {
+          console.log('❌ No existing tasks found or failed to fetch')
         }
+      } catch (err) {
+        console.warn('⚠️ Failed to get existing tasks, continuing anyway:', err)
+        // このエラーでは処理を中断しない
       }
 
       const createdKeys = new Set<string>()
@@ -602,100 +808,233 @@ ${requirementsSummary}
         .filter(pt => pt.title && pt.startDate && pt.endDate)
         .map(pt => ({ ...pt }))
 
-      for (const t of toCreate) {
-        // 入力検証（簡易）
-        if (!t.title.trim()) continue
-        const start = new Date(t.startDate)
-        const end = new Date(t.endDate)
-        if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) continue
-        const tagsArr = (t.tags || '')
-          .split(',')
-          .map(s => s.trim())
-          .filter(s => s.length > 0)
-        
-        // 拡張データをdescriptionに含める（暫定的な実装）
-        const extendedDescription = [
-          t.description,
-          t.content ? `\n【詳細内容】\n${t.content}` : '',
-          t.technologies?.length ? `\n【使用技術】${t.technologies.join(', ')}` : '',
-          t.deliverables?.length ? `\n【成果物】\n${t.deliverables.map(d => `- ${d}`).join('\n')}` : '',
-          t.risks?.length ? `\n【リスク】\n${t.risks.map(r => `- ${r}`).join('\n')}` : '',
-          t.notes ? `\n【備考】\n${t.notes}` : ''
-        ].filter(s => s).join('')
-        
-        // 既存・同バッチ重複のスキップ（類似タイトル/担当/日付で判定）
-        const startDay = start.toISOString().slice(0,10)
-        const endDay = end.toISOString().slice(0,10)
-        const assignee = (t.assignee || '').trim()
-        const titleNorm = normalizeText(t.title)
-        const dupInExisting = existingList.some(ex =>
-          ex.assignee === assignee && ex.startDay === startDay && ex.endDay === endDay &&
-          (ex.titleNorm === titleNorm || isSimilarTitle(ex.titleNorm, titleNorm))
-        )
-        const batchKey = `${titleNorm}__${assignee}__${startDay}__${endDay}`
-        if (dupInExisting || createdKeys.has(batchKey)) continue
+      console.log(`📝 Processing ${toCreate.length} tasks for creation`)
+      console.log('Tasks to create:', toCreate.map(t => t.title))
 
-        const taskData = {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
-          projectId: currentProjectId || 'default',
-          title: t.title,
-          description: extendedDescription || t.description,
-          estimatedHours: t.estimatedHours ?? 1,
-          startDate: start.toISOString(),
-          endDate: end.toISOString(),
-          priority: t.priority,
-          progress: 0,
-          dependencies: t.dependencies || [],
-          tags: tagsArr,
-          status: t.status || 'pending',
-          assignee: t.assignee,
-          actualHours: t.actualHours,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+      // タスクの作成を一つずつ処理
+      let createdCount = 0
+      const errors: string[] = []
+
+      for (let i = 0; i < toCreate.length; i++) {
+        const t = toCreate[i]
+        console.log(`🔄 === PROCESSING TASK ${i + 1}/${toCreate.length} ===`)
+        console.log('Task title:', t.title)
+
+        try {
+          // 入力検証（簡易）
+          if (!t.title.trim()) {
+            console.warn(`⚠️ Skipping task ${i + 1}: empty title`)
+            continue
+          }
+
+          const start = new Date(t.startDate)
+          const end = new Date(t.endDate)
+          console.log('Task dates:', { start: t.startDate, end: t.endDate, startParsed: start, endParsed: end })
+
+          if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) {
+            console.warn(`⚠️ Skipping task ${i + 1}: invalid dates`, { start: t.startDate, end: t.endDate })
+            continue
+          }
+
+          const tagsArr = (t.tags || '')
+            .split(',')
+            .map(s => s.trim())
+            .filter(s => s.length > 0)
+          console.log('Task tags:', tagsArr)
+
+          // 拡張データをdescriptionに含める（暫定的な実装）
+          const extendedDescription = [
+            t.description,
+            t.content ? `\n【詳細内容】\n${t.content}` : '',
+            t.technologies?.length ? `\n【使用技術】${t.technologies.join(', ')}` : '',
+            t.deliverables?.length ? `\n【成果物】\n${t.deliverables.map(d => `- ${d}`).join('\n')}` : '',
+            t.risks?.length ? `\n【リスク】\n${t.risks.map(r => `- ${r}`).join('\n')}` : '',
+            t.notes ? `\n【備考】\n${t.notes}` : ''
+          ].filter(s => s).join('')
+
+          console.log('Extended description length:', extendedDescription.length)
+
+          // 既存・同バッチ重複のスキップ（類似タイトル/担当/日付で判定）
+          const startDay = start.toISOString().slice(0,10)
+          const endDay = end.toISOString().slice(0,10)
+          const assignee = (t.assignee || '').trim()
+          const titleNorm = normalizeText(t.title)
+          console.log('Duplicate check data:', { startDay, endDay, assignee, titleNorm })
+
+          const dupInExisting = existingList.some(ex =>
+            ex.assignee === assignee && ex.startDay === startDay && ex.endDay === endDay &&
+            (ex.titleNorm === titleNorm || isSimilarTitle(ex.titleNorm, titleNorm))
+          )
+          const batchKey = `${titleNorm}__${assignee}__${startDay}__${endDay}`
+
+          console.log('Duplicate check results:', { dupInExisting, batchKey, hasBatchKey: createdKeys.has(batchKey) })
+
+          if (dupInExisting) {
+            console.log(`⏭️ Skipping task ${i + 1}: duplicate found in existing tasks`)
+            continue
+          }
+
+          if (createdKeys.has(batchKey)) {
+            console.log(`⏭️ Skipping task ${i + 1}: duplicate in current batch`)
+            continue
+          }
+
+          const taskData = {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+            projectId: currentProjectId || 'default',
+            title: t.title,
+            description: extendedDescription || t.description,
+            estimatedHours: t.estimatedHours ?? 1,
+            startDate: start.toISOString(),
+            endDate: end.toISOString(),
+            priority: t.priority,
+            progress: 0,
+            dependencies: t.dependencies || [],
+            tags: tagsArr,
+            // 承認後は「進行中」に遷移させる
+            status: t.status || 'in-progress',
+            assignee: t.assignee,
+            actualHours: t.actualHours,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }
+
+          console.log('📦 Final task data:', JSON.stringify(taskData, null, 2))
+          console.log(`💾 Creating task ${i + 1}/${toCreate.length}: ${t.title}`)
+
+          await withTimeout(storage.saveTask(taskData), `save task "${t.title}"`)
+
+          createdCount++
+          createdKeys.add(batchKey)
+          console.log(`✅ Task ${i + 1} created successfully`)
+
+        } catch (saveErr) {
+          const errorMsg = `Failed to save task "${t.title}": ${saveErr instanceof Error ? saveErr.message : 'Unknown error'}`
+          console.error(`❌ Task ${i + 1} creation failed:`, errorMsg)
+          console.error('Error details:', saveErr)
+          errors.push(errorMsg)
         }
-        
-        console.log('Saving task:', taskData)
-        const saveResult = await storage.saveTask(taskData)
-        console.log('Save result:', saveResult)
-
-        createdKeys.add(batchKey)
       }
 
-      // 追加: 承認後にDBから最新のタスクを取得してReduxへ反映
-      console.log('Getting tasks for project:', currentProjectId || 'default')
-      const res = await storage.getTasks(currentProjectId || 'default')
-      console.log('Got tasks:', res)
-      if (res.success && res.data) {
-        const mapped: ReduxTask[] = res.data.map((row: any) => ({
-          id: row.id,
-          projectId: row.projectId || (row as any).project_id || 'default',
-          title: row.title,
-          description: row.description ?? '',
-          startDate: new Date(row.startDate || row.start_date),
-          endDate: new Date(row.endDate || row.end_date),
-          progress: row.progress,
-          priority: row.priority,
-          dependencies: row.dependencies ?? [],
-          status: row.status,
-          estimatedHours: row.estimatedHours ?? row.estimated_hours ?? 0,
-          actualHours: row.actualHours ?? row.actual_hours ?? undefined,
-          assignee: row.assignee ?? undefined,
-          tags: row.tags ?? [],
-        }))
-        dispatch(setTasks(mapped))
+      console.log(`Successfully created ${createdCount} out of ${toCreate.length} tasks`)
+
+      // 承認後にDBから最新のタスクを取得してReduxへ反映
+      console.log('🔄 === UPDATING REDUX STATE ===')
+      try {
+        console.log('⏳ Waiting 200ms for DB write completion')
+        await new Promise(resolve => setTimeout(resolve, 200))
+
+        console.log('📥 Fetching updated tasks from database')
+        const res = await withTimeout(
+          storage.getTasks(currentProjectId || 'default'),
+          'fetch updated tasks'
+        )
+
+        console.log('Fetch result:', res)
+
+        if (res.success && res.data) {
+          console.log(`📊 Mapping ${res.data.length} tasks for Redux`)
+          const mapped: ReduxTask[] = res.data.map((row: any, index: number) => {
+            console.log(`Mapping task ${index + 1}:`, row.title)
+            return {
+              id: row.id,
+              projectId: row.projectId || (row as any).project_id || 'default',
+              title: row.title,
+              description: row.description ?? '',
+              startDate: new Date(row.startDate || row.start_date),
+              endDate: new Date(row.endDate || row.end_date),
+              progress: row.progress,
+              priority: row.priority,
+              dependencies: row.dependencies ?? [],
+              status: row.status,
+              estimatedHours: row.estimatedHours ?? row.estimated_hours ?? 0,
+              actualHours: row.actualHours ?? row.actual_hours ?? undefined,
+              assignee: row.assignee ?? undefined,
+              tags: row.tags ?? [],
+            }
+          })
+
+          console.log(`🚀 Dispatching setTasks with ${mapped.length} tasks`)
+          console.log('Mapped tasks:', mapped.map(t => ({ id: t.id, title: t.title })))
+          dispatch(setTasks(mapped))
+          console.log('✅ Redux state updated successfully')
+        } else {
+          console.log('❌ No tasks to update or fetch failed')
+        }
+      } catch (fetchErr) {
+        console.error('❌ Failed to fetch updated tasks:', fetchErr)
+        // このエラーでは処理を中断しない
       }
+      console.log('🔄 === REDUX UPDATE END ===')
+
+      // 成功メッセージ
+      console.log('📝 === FINALIZING TASK ACCEPTANCE ===')
+      console.log('Created count:', createdCount)
+      console.log('Errors count:', errors.length)
+      console.log('Total to create:', toCreate.length)
+
+      if (createdCount > 0) {
+        let successMessage = `✅ ${createdCount}個のタスクを正常に作成しました。`
+        if (errors.length > 0) {
+          successMessage += ` (${errors.length}個のタスクでエラーが発生しました)`
+        }
+        console.log('Adding success message to chat:', successMessage)
+        setMessages(prev => [...prev, {
+          id: `msg-${Date.now()}`,
+          type: 'ai',
+          content: successMessage,
+          timestamp: new Date(),
+          reactions: []
+        }])
+      } else if (toCreate.length === 0) {
+        console.log('No tasks to create - adding warning message')
+        setMessages(prev => [...prev, {
+          id: `msg-${Date.now()}`,
+          type: 'ai',
+          content: '⚠️ 作成可能なタスクが見つかりませんでした。タスクの情報が正しいか確認してください。',
+          timestamp: new Date(),
+          reactions: []
+        }])
+      }
+
+      // エラーがあった場合の追加メッセージ
+      if (errors.length > 0) {
+        console.log('Adding error details to chat')
+        setMessages(prev => [...prev, {
+          id: `error-${Date.now()}`,
+          type: 'ai',
+          content: `⚠️ 以下のタスクでエラーが発生しました:\n${errors.slice(0, 3).map(e => `• ${e}`).join('\n')}${errors.length > 3 ? `\n...他${errors.length - 3}件` : ''}`,
+          timestamp: new Date(),
+          reactions: []
+        }])
+      }
+
+      console.log('✅ Calling resetState with success=true')
+      // 正常完了
+      resetState(true)
+
+      console.log('🔄 === TASK ACCEPTANCE END (SUCCESS) ===')
+
     } catch (e) {
-      console.error('Create tasks failed', e)
-    } finally {
-      setShowReview(false)
-      setPendingTasks([])
-      setIsApproving(false)
+      console.log('🔄 === TASK ACCEPTANCE END (ERROR) ===')
+      const errorMsg = e instanceof Error ? e.message : '不明なエラー'
+      console.error('❌ Task acceptance failed with error:', e)
+      console.error('Error type:', typeof e)
+      console.error('Error constructor:', e?.constructor?.name)
+      console.error('Error stack:', e instanceof Error ? e.stack : 'No stack trace')
+      resetState(false, errorMsg)
     }
   }
 
   const rejectTasks = () => {
+    console.log('Rejecting tasks and clearing state')
     setShowReview(false)
     setPendingTasks([])
+    // isApproving状態もリセット（念のため）
+    if (isApproving) {
+      console.warn('Resetting isApproving state during task rejection')
+      setIsApproving(false)
+    }
   }
 
   return (

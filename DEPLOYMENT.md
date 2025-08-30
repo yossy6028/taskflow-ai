@@ -44,6 +44,13 @@ VITE_FIREBASE_APP_ID=your_app_id
 2. デプロイが完了したら、アプリケーションにアクセス
 3. AI対話機能でタスク生成を試して動作確認
 
+補足: Viteの出力ディレクトリ
+- 本リポジトリのVite出力は `dist/renderer` です（`vite.config.ts`）。
+- Vercelが正しく検知できるよう、`vercel.json` を同梱しています。
+  - buildCommand: `npm run build:renderer`
+  - outputDirectory: `dist/renderer`
+  - これにより、Vercelの自動設定でも問題なく配信されます。
+
 ### トラブルシューティング
 
 #### エラー: "Gemini API key not configured"

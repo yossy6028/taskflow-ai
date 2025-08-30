@@ -115,7 +115,8 @@ const TaskTextImportModal: React.FC<Props> = ({ isOpen, onClose }) => {
           progress: 0,
           dependencies: [],
           tags: tagsArr,
-          status: 'pending',
+          // 取り込み承認後は進行中へ
+          status: 'in-progress',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         });
@@ -225,7 +226,6 @@ const TaskTextImportModal: React.FC<Props> = ({ isOpen, onClose }) => {
 };
 
 export default TaskTextImportModal;
-
 
 
 

@@ -199,7 +199,16 @@ class DatabaseService {
     `);
     const existing = existingStmt.get(projectId, titleNorm, assignee, startDate, endDate) as { id: string } | undefined;
     if (existing) {
-      // 既に存在する場合は挿入せず、既存IDを返す
+      // 既に存在する場合は、承認起因の変更（例: ステータス遷移）を反映してIDを返す
+      try {
+        if (task.status) {
+          const upd = this.db.prepare('UPDATE tasks SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+          upd.run(task.status, existing.id);
+        }
+      } catch (e) {
+        // 更新に失敗しても挿入スキップは維持（ログのみ）
+        console.warn('Duplicate task found; failed to update existing row status.', e);
+      }
       return { ...task, id: existing.id };
     }
 
