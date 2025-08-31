@@ -2,6 +2,5 @@
   "buildCommand": "npm ci && npm run build:renderer",
   "outputDirectory": "dist/renderer",
   "framework": "vite",
-  "installCommand": "npm ci",
-  "ignoreCommand": "echo 'Use Vercel redeploy to force rebuild'"
+  "installCommand": "npm ci"
 }
