@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import { RootState } from '../../store'
-import { setCurrentProject, addProject, Project } from '../../store/slices/projectsSlice'
+import { setCurrentProject, addProject, deleteProject, archiveProject, updateProject, Project } from '../../store/slices/projectsSlice'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ChevronDown,
@@ -35,6 +35,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   
   const [isOpen, setIsOpen] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showManageModal, setShowManageModal] = useState(false)
   const [newProject, setNewProject] = useState({
     name: '',
     description: '',
@@ -50,6 +51,19 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
     dispatch(setCurrentProject(projectId))
     setIsOpen(false)
     onProjectChange?.(projectId)
+  }
+
+  const handleDeleteProject = async (projectId: string) => {
+    if (projectId === 'default') return
+    const ok = window.confirm('このプロジェクトを削除しますか？\n関連するタスクも削除されます。元に戻せません。')
+    if (!ok) return
+    try {
+      const { storage } = await import('../../utils/platform')
+      await storage.deleteProject(projectId)
+    } catch (e) {
+      console.error('Failed to delete project from storage', e)
+    }
+    dispatch(deleteProject(projectId))
   }
 
   const handleCreateProject = () => {
@@ -73,6 +87,83 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
     dispatch(setCurrentProject(project.id))
     setShowCreateModal(false)
     setNewProject({ name: '', description: '', color: '#3B82F6', icon: '📁' })
+  }
+
+  const handleArchiveProject = (projectId: string) => {
+    if (projectId === 'default') return
+    dispatch(archiveProject(projectId))
+  }
+
+  const handleRestoreProject = (projectId: string) => {
+    dispatch(updateProject({ id: projectId, updates: { status: 'active' } as any }))
+  }
+
+  // 重複プロジェクトの自動統合
+  const autoMergeDuplicates = async () => {
+    try {
+      // 正規化関数（AIDialogueと同じロジック）
+      const normalizeProjectName = (s: string) => (s || '')
+        .toLowerCase()
+        .replace(/[\s\u3000]/g, '')
+        .replace(/[、，。．・,\.\-_/\\()[\]{}【】]/g, '')
+        .replace(/プロジェクト$/u, '')
+        .trim()
+
+      // 名前正規化ごとにグループ化
+      const groups = new Map<string, Project[]>()
+      for (const p of projects) {
+        if (p.id === 'default') continue
+        const key = normalizeProjectName(p.name)
+        const arr = groups.get(key) || []
+        arr.push(p)
+        groups.set(key, arr)
+      }
+
+      // プラットフォームAPI
+      const isElectronEnv = typeof window !== 'undefined' && !!(window as any).electronAPI
+      const { storage } = await import('../../utils/platform')
+      const fb = await import('../../services/firebase').catch(() => null as any)
+
+      for (const [_, arr] of groups) {
+        if (arr.length <= 1) continue
+        // 最初のプロジェクトを正として、それ以外を統合
+        const [primary, ...dups] = arr.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+        for (const d of dups) {
+          try {
+            if (isElectronEnv) {
+              const res = await window.electronAPI.dbGetTasks()
+              if (res.success && res.data) {
+                const list = res.data.filter((row: any) => (row.project_id || 'default') === d.id)
+                for (const row of list) {
+                  await window.electronAPI.dbUpdateTask(row.id, { project_id: primary.id } as any)
+                }
+              }
+            } else if (fb && fb.firebaseAuth && fb.firebaseDB) {
+              const user = fb.firebaseAuth.getCurrentUser?.()
+              if (user) {
+                const res = await storage.getTasks(d.id)
+                if (res.success && Array.isArray(res.data)) {
+                  for (const t of res.data) {
+                    await fb.firebaseDB.saveTask(user.uid, { ...t, projectId: primary.id })
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            console.error('Failed to move tasks during merge', e)
+          }
+          // 重複プロジェクトを削除
+          try {
+            await storage.deleteProject(d.id)
+          } catch {}
+          dispatch(deleteProject(d.id))
+        }
+      }
+      alert('重複プロジェクトの自動統合が完了しました。')
+    } catch (e) {
+      console.error('autoMergeDuplicates failed', e)
+      alert('重複統合でエラーが発生しました。')
+    }
   }
 
   const getStatusIcon = (status: string) => {
@@ -152,6 +243,16 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
                         <div className={getStatusColor(project.status)}>
                           {getStatusIcon(project.status)}
                         </div>
+                        {project.id !== 'default' && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); void handleDeleteProject(project.id) }}
+                            className="ml-2 p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                            title="削除"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -172,6 +273,16 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
                     </button>
                   </div>
                 )}
+                {/* 管理モード */}
+                <div className="border-t border-neutral-200 dark:border-neutral-700 p-2">
+                  <button
+                    onClick={() => { setIsOpen(false); setShowManageModal(true) }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors"
+                  >
+                    <Settings className="w-4 h-4" />
+                    <span className="text-sm font-medium">プロジェクト管理...</span>
+                  </button>
+                </div>
               </div>
             </motion.div>
           )}
@@ -378,6 +489,60 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
                 >
                   作成
                 </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 管理モーダル */}
+      <AnimatePresence>
+        {showManageModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowManageModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.96, opacity: 0 }}
+              className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-3xl w-full p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">プロジェクト管理</h3>
+                <div className="flex gap-2">
+                  <button onClick={() => void autoMergeDuplicates()} className="px-3 py-2 text-sm bg-neutral-100 dark:bg-neutral-700 rounded-lg">重複を自動統合</button>
+                  <button onClick={() => setShowManageModal(false)} className="px-3 py-2 text-sm rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700">閉じる</button>
+                </div>
+              </div>
+              <div className="max-h-[60vh] overflow-y-auto divide-y divide-neutral-200 dark:divide-neutral-700">
+                {projects.map(p => (
+                  <div key={p.id} className="flex items-center justify-between py-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{p.icon}</span>
+                      <div>
+                        <div className="font-medium">{p.name} {p.id === 'default' && <span className="text-xs text-neutral-500">(default)</span>}</div>
+                        <div className="text-xs text-neutral-500">{new Date(p.createdAt).toLocaleString('ja-JP')}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {p.id !== 'default' && (
+                        <>
+                          {p.status === 'archived' ? (
+                            <button onClick={() => handleRestoreProject(p.id)} className="px-3 py-1.5 text-sm rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">復元</button>
+                          ) : (
+                            <button onClick={() => handleArchiveProject(p.id)} className="px-3 py-1.5 text-sm rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300">アーカイブ</button>
+                          )}
+                          <button onClick={() => void handleDeleteProject(p.id)} className="px-3 py-1.5 text-sm rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">削除</button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </motion.div>
           </motion.div>

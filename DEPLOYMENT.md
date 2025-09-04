@@ -38,6 +38,17 @@ VITE_FIREBASE_APP_ID=your_app_id
    - Environment: Production, Preview, Development すべてにチェック
 6. 「Save」をクリック
 
+### Firebase Authentication の追加設定
+
+1. Firebase Console → Authentication → Sign-in method
+   - Email/Password を「有効化」
+2. Authentication → Settings → Authorized domains
+   - デプロイ先のドメイン（例：`taskflow-ai-lake.vercel.app`）を追加
+3. Authentication → Users
+   - デモユーザーを作成（任意）
+     - Email: `demo@taskflow.ai`
+     - Password: `demo123`
+
 ### 設定後の確認
 
 1. Vercelで新しいデプロイをトリガー（GitHubにプッシュするか、手動でRedeploy）
@@ -61,6 +72,14 @@ VITE_FIREBASE_APP_ID=your_app_id
 #### エラー: "Firebase not configured"
 - すべてのFirebase環境変数が正しく設定されているか確認
 - Firebase Realtime Databaseのリージョンが`asia-southeast1`になっているか確認
+- Authentication の Email/Password が有効か確認
+- Authorized domains にデプロイ先ドメインが含まれているか確認
+
+#### デモログインができない
+- `demo@taskflow.ai / demo123` でエラーが出る場合：
+  - Firebase Users にデモユーザーが存在しない → 本アプリはデモユーザーが未作成の場合、自動作成を試みます（`auth/user-not-found`）
+  - Email/Password が無効 → Authentication の Sign-in method を有効化
+  - Authorized domains に Vercel ドメインがない → 追加して再試行
 
 ### ローカル開発環境
 

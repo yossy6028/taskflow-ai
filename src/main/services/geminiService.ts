@@ -102,9 +102,9 @@ class GeminiService {
       throw new Error('Message is required');
     }
     
-    // 許容長を拡張（Enriched用のプロンプトは長くなるため）
-    if (message.length > 12000) {
-      throw new Error('Message too long. Please limit to 12000 characters.');
+    // 長文制限（テストおよびIPCハンドラの仕様に合わせる）
+    if (message.length > 2000) {
+      throw new Error('Message too long. Please limit to 2000 characters.');
     }
     
     // 包括的なサニタイゼーション

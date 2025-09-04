@@ -1,12 +1,32 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Gemini API設定
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
+// Gemini API設定（複数の環境変数をチェック）
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY ||
+                import.meta.env.GEMINI_API_KEY ||
+                process.env.GEMINI_API_KEY ||
+                process.env.VITE_GEMINI_API_KEY || '';
 
-// デバッグ情報
-if (import.meta.env.DEV) {
-  console.log('Gemini API Key configured:', API_KEY ? 'Yes' : 'No');
+// デバッグ情報（本番環境でもAPIキー設定を確認）
+console.log('=== Gemini API Configuration Debug ===');
+console.log('Environment check:', {
+  isDev: import.meta.env.DEV,
+  isProd: import.meta.env.PROD,
+  importMetaEnv: {
+    VITE_GEMINI_API_KEY: !!import.meta.env.VITE_GEMINI_API_KEY,
+    GEMINI_API_KEY: !!import.meta.env.GEMINI_API_KEY
+  },
+  processEnv: {
+    GEMINI_API_KEY: !!process.env.GEMINI_API_KEY,
+    VITE_GEMINI_API_KEY: !!process.env.VITE_GEMINI_API_KEY
+  }
+});
+console.log('Final API Key configured:', API_KEY ? 'Yes' : 'No');
+if (!API_KEY) {
+  console.error('⚠️  Gemini API Key is NOT configured! This will cause API calls to fail.');
+} else {
+  console.log('✅ Gemini API Key is configured');
 }
+console.log('====================================');
 
 // タスク分解のコンテキスト
 export interface TaskBreakdownContext {
@@ -36,22 +56,36 @@ class GeminiService {
   }
 
   async chat(message: string, conversationHistory: any[] = []): Promise<string> {
+    console.log('💬 Starting Gemini chat');
+    console.log('Message length:', message.length);
+    console.log('History length:', conversationHistory.length);
+
     try {
       this.ensureInitialized();
-      const model = this.genAI!.getGenerativeModel({ model: 'gemini-2.5-flash' });
-      
+      console.log('✅ Gemini service initialized for chat');
+
+      const model = this.genAI!.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      console.log('🤖 Chat model created');
+
       const chat = model.startChat({
         history: conversationHistory.map(msg => ({
           role: msg.role === 'user' ? 'user' : 'model',
           parts: [{ text: msg.content }]
         }))
       });
+      console.log('📝 Chat session started');
 
+      console.log('⏳ Sending message to Gemini...');
       const result = await chat.sendMessage(message);
+      console.log('📥 Chat response received');
+
       const response = await result.response;
-      return response.text();
+      const text = response.text();
+      console.log('💬 Chat response text length:', text.length);
+
+      return text;
     } catch (error: any) {
-      console.error('Gemini chat error:', error);
+      console.error('❌ Gemini chat error:', error);
       throw new Error(this.getErrorMessage(error));
     }
   }
@@ -61,25 +95,50 @@ class GeminiService {
   }
 
   async generateTaskBreakdown(userInput: string, context: TaskBreakdownContext = {}): Promise<any> {
+    console.log('🚀 Starting generateTaskBreakdown');
+    console.log('Input length:', userInput.length);
+    console.log('Context:', context);
+
     try {
       this.ensureInitialized();
-      const model = this.genAI!.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      console.log('✅ Gemini service initialized');
+
+      const model = this.genAI!.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      console.log('🤖 Model created: gemini-1.5-flash');
 
       const prompt = this.buildTaskBreakdownPrompt(userInput, context);
+      console.log('📝 Prompt built, length:', prompt.length);
+
+      console.log('⏳ Calling Gemini API...');
       const result = await model.generateContent(prompt);
+      console.log('📥 API response received');
+
       const response = await result.response;
       const text = response.text();
+      console.log('📄 Response text length:', text.length);
 
       // JSONレスポンスを解析
       const jsonMatch = text.match(/```json\n?([\s\S]*?)\n?```/);
       if (jsonMatch) {
-        return JSON.parse(jsonMatch[1]);
+        console.log('🔍 Found JSON in code blocks');
+        const parsed = JSON.parse(jsonMatch[1]);
+        console.log('✅ Successfully parsed JSON from code blocks');
+        return parsed;
       }
-      
+
       // JSONマーカーがない場合は全体をパース
-      return JSON.parse(text);
+      console.log('🔍 No JSON code blocks found, parsing entire text');
+      const parsed = JSON.parse(text);
+      console.log('✅ Successfully parsed JSON from entire text');
+      return parsed;
     } catch (error: any) {
-      console.error('Task breakdown error:', error);
+      console.error('❌ Task breakdown error:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        code: error.code,
+        status: error.status,
+        name: error.name
+      });
       throw new Error(this.getErrorMessage(error));
     }
   }
@@ -92,7 +151,7 @@ class GeminiService {
   async breakdownTask(params: { title: string; targetCount?: number }): Promise<any> {
     try {
       this.ensureInitialized();
-      const model = this.genAI!.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const model = this.genAI!.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
       const targetCount = params.targetCount || 3;
       const prompt = `
@@ -132,7 +191,7 @@ class GeminiService {
   async generateSubtasks(taskTitle: string, taskDescription: string): Promise<any> {
     try {
       this.ensureInitialized();
-      const model = this.genAI!.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const model = this.genAI!.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
       const prompt = `
 タスク「${taskTitle}」を実行可能なサブタスクに分解してください。
@@ -173,7 +232,7 @@ class GeminiService {
   async analyzeDependencies(tasks: any[]): Promise<any> {
     try {
       this.ensureInitialized();
-      const model = this.genAI!.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const model = this.genAI!.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
       const taskList = tasks.map(t => `- ${t.title}: ${t.description || '説明なし'}`).join('\n');
       const prompt = `
@@ -255,16 +314,69 @@ ${taskList}
   }
 
   private getErrorMessage(error: any): string {
-    if (error.message?.includes('API key not valid')) {
-      return 'Gemini APIキーが無効です。環境変数を確認してください。';
+    console.error('=== Gemini API Error Details ===');
+    console.error('Error object:', error);
+    console.error('Error message:', error?.message);
+    console.error('Error code:', error?.code);
+    console.error('Error status:', error?.status);
+    console.error('Error name:', error?.name);
+    console.error('=============================');
+
+    // APIキー関連のエラー
+    if (error?.message?.includes('API_KEY_INVALID') ||
+        error?.message?.includes('API key not valid') ||
+        error?.message?.includes('invalid api key') ||
+        error?.code === 'API_KEY_INVALID') {
+      return 'Gemini APIキーが無効または設定されていません。管理者に連絡してください。';
     }
-    if (error.message?.includes('quota')) {
-      return 'APIクォータを超過しました。しばらく待ってから再試行してください。';
+
+    // 認証エラー
+    if (error?.message?.includes('PERMISSION_DENIED') ||
+        error?.message?.includes('permission') ||
+        error?.code === 'PERMISSION_DENIED') {
+      return 'APIアクセス権限がありません。APIキーの権限を確認してください。';
     }
-    if (error.message?.includes('network')) {
-      return 'ネットワークエラーが発生しました。接続を確認してください。';
+
+    // レート制限エラー
+    if (error?.message?.includes('RESOURCE_EXHAUSTED') ||
+        error?.message?.includes('quota') ||
+        error?.message?.includes('rate limit') ||
+        error?.code === 'RESOURCE_EXHAUSTED') {
+      return 'APIの利用制限を超過しました。しばらく待ってから再試行してください。';
     }
-    return error.message || 'タスク生成中にエラーが発生しました。';
+
+    // ネットワークエラー
+    if (error?.message?.includes('network') ||
+        error?.message?.includes('fetch') ||
+        error?.message?.includes('connection') ||
+        error?.code === 'NETWORK_ERROR' ||
+        !navigator.onLine) {
+      return 'ネットワークエラーが発生しました。インターネット接続を確認してください。';
+    }
+
+    // タイムアウトエラー
+    if (error?.message?.includes('timeout') ||
+        error?.code === 'DEADLINE_EXCEEDED') {
+      return 'APIリクエストがタイムアウトしました。しばらく待ってから再試行してください。';
+    }
+
+    // 無効なリクエスト
+    if (error?.message?.includes('INVALID_ARGUMENT') ||
+        error?.code === 'INVALID_ARGUMENT') {
+      return 'リクエスト内容に問題があります。内容を見直してください。';
+    }
+
+    // サーバーエラー
+    if (error?.message?.includes('INTERNAL') ||
+        error?.message?.includes('UNAVAILABLE') ||
+        error?.code === 'INTERNAL' ||
+        error?.code === 'UNAVAILABLE' ||
+        (error?.status >= 500 && error?.status < 600)) {
+      return 'Gemini APIサーバーで一時的なエラーが発生しています。しばらく待ってから再試行してください。';
+    }
+
+    // その他のエラー
+    return error?.message || 'タスク生成中に予期しないエラーが発生しました。';
   }
 }
 

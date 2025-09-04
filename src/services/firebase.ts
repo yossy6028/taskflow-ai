@@ -3,6 +3,7 @@ import {
   getAuth, 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
+  fetchSignInMethodsForEmail,
   signOut,
   onAuthStateChanged,
   User
@@ -120,7 +121,7 @@ export const firebaseAuth = {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       return { success: true, user: userCredential.user };
     } catch (error: any) {
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, code: error?.code } as any;
     }
   },
 
@@ -132,7 +133,33 @@ export const firebaseAuth = {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       return { success: true, user: userCredential.user };
     } catch (error: any) {
-      return { success: false, error: error.message };
+      // デモユーザー自動作成フォールバック
+      const code = error?.code as string | undefined;
+      const isDemo = email === 'demo@taskflow.ai' && password === 'demo123';
+      if (isDemo && (code === 'auth/user-not-found' || code === 'auth/invalid-credential' || code === 'auth/invalid-login-credentials' || code === 'auth/wrong-password')) {
+        try {
+          // Email/Password サインイン方式の有効性を簡易確認
+          try {
+            const methods = await fetchSignInMethodsForEmail(auth, email);
+            if (methods && !methods.includes('password')) {
+              return { success: false, error: 'Email/Password sign-in is disabled in Firebase.', code: 'auth/operation-not-allowed' } as any;
+            }
+          } catch (_) {}
+
+          const created = await createUserWithEmailAndPassword(auth, email, password);
+          return { success: true, user: created.user };
+        } catch (createErr: any) {
+          const createCode = createErr?.code as string | undefined;
+          if (createCode === 'auth/email-already-in-use') {
+            return { success: false, error: 'Demo user exists with different password. Set password to "demo123" or delete user.', code: createCode } as any;
+          }
+          if (createCode === 'auth/operation-not-allowed') {
+            return { success: false, error: 'Enable Email/Password provider in Firebase Console.', code: createCode } as any;
+          }
+          return { success: false, error: createErr?.message || 'Failed to create demo user', code: createCode } as any;
+        }
+      }
+      return { success: false, error: error.message, code } as any;
     }
   },
 
@@ -182,15 +209,29 @@ export const firebaseDB = {
       const taskRef = ref(database, taskPath);
       console.log('Task ref created');
 
-      const taskData = {
+      // Realtime Databaseはundefinedを保存できないため、undefinedキーを除去
+      // また、Date/number/boolean/array/objectのみになるように整形
+      const rawData = {
         ...task,
         updatedAt: Date.now()
-      };
+      } as Record<string, unknown>;
+      const taskData = Object.fromEntries(
+        Object.entries(rawData).filter(([_, v]) => v !== undefined)
+      );
       console.log('Task data to save:', taskData);
 
       console.log('Calling Firebase set...');
       await set(taskRef, taskData);
       console.log('✅ Firebase set completed successfully');
+
+      // 書き込み検証（同一パスを即時読み出し）
+      await new Promise(r => setTimeout(r, 50));
+      const verifySnap = await get(taskRef);
+      const ok = verifySnap.exists();
+      if (!ok) {
+        console.error('❌ Verification failed: task not found after set', task.id);
+        return { success: false, error: 'Verification failed after write' };
+      }
 
       return { success: true };
     } catch (error: any) {
@@ -248,6 +289,20 @@ export const firebaseDB = {
     }
   },
 
+  // 特定タスクの取得
+  getTask: async (userId: string, taskId: string) => {
+    try {
+      const taskRef = ref(database, `users/${userId}/tasks/${taskId}`);
+      const snapshot = await get(taskRef);
+      if (snapshot.exists()) {
+        return { success: true, data: snapshot.val() };
+      }
+      return { success: false, error: 'Not found' };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  },
+
   // リアルタイムリスナー
   subscribeToTasks: (userId: string, callback: (tasks: any) => void) => {
     const tasksRef = ref(database, `users/${userId}/tasks`);
@@ -263,6 +318,17 @@ export const firebaseDB = {
     try {
       const taskRef = ref(database, `users/${userId}/tasks/${taskId}`);
       await remove(taskRef);
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  },
+
+  // プロジェクトの削除（関連タスクの削除は呼び出し側で実施）
+  deleteProject: async (userId: string, projectId: string) => {
+    try {
+      const projectRef = ref(database, `users/${userId}/projects/${projectId}`);
+      await remove(projectRef);
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };

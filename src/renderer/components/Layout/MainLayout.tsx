@@ -31,6 +31,7 @@ import type { RootState } from '../../store'
 import { setTasks, Task as ReduxTask } from '../../store/slices/tasksSlice'
 import ProjectCreationModal from '../Projects/ProjectCreationModal'
 import { addProject, setCurrentProject } from '../../store/slices/projectsSlice'
+import AuthStatus from '../Auth/AuthStatus'
 
 interface MainLayoutProps {
   children: React.ReactNode
@@ -85,6 +86,19 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
     window.addEventListener('resize', checkMobile)
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
+
+  // AIDialogueからのナビゲーションイベントを受け取ってセクションを切り替える
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { section?: string }
+      if (detail?.section) {
+        setActiveSection(detail.section)
+        if (isMobile) setSidebarOpen(false)
+      }
+    }
+    window.addEventListener('tf:navigate', handler as EventListener)
+    return () => window.removeEventListener('tf:navigate', handler as EventListener)
+  }, [isMobile])
 
   // 現在のプロジェクトのタスクをロード（初回とプロジェクト切替時）
   useEffect(() => {
@@ -256,15 +270,9 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
               </AnimatePresence>
             </button>
 
-            {/* Profile - Hidden on mobile */}
-            <div className="hidden sm:flex items-center gap-3 ml-2 pl-2 border-l border-neutral-200 dark:border-neutral-800">
-              <div className="hidden lg:block text-right">
-                <p className="text-sm font-medium">Yoshii Katsuhiko</p>
-                <p className="text-xs text-neutral-500 dark:text-neutral-400">プロジェクトマネージャー</p>
-              </div>
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-400 to-secondary-400 flex items-center justify-center text-white font-semibold shadow-md">
-                YK
-              </div>
+            {/* Auth status / login (web) */}
+            <div className="hidden sm:flex items-center ml-2 pl-2 border-l border-neutral-200 dark:border-neutral-800">
+              <AuthStatus />
             </div>
 
             {/* Mobile Menu Toggle */}

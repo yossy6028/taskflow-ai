@@ -16,6 +16,26 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const handleDemoLogin = async () => {
+    setIsSignUp(false);
+    setError('');
+    setLoading(true);
+    setEmail('demo@taskflow.ai');
+    setPassword('demo123');
+    try {
+      const result = await firebaseAuth.signIn('demo@taskflow.ai', 'demo123');
+      if (result.success) {
+        onLoginSuccess();
+      } else {
+        setError(result.error || 'デモログインに失敗しました');
+      }
+    } catch (err) {
+      setError('デモログインで予期しないエラーが発生しました');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -191,6 +211,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               <p className="text-xs text-neutral-600 dark:text-neutral-400 text-center">
                 デモアカウント：demo@taskflow.ai / demo123
               </p>
+              <div className="mt-3 flex justify-center">
+                <button
+                  type="button"
+                  onClick={handleDemoLogin}
+                  disabled={loading}
+                  className="px-4 py-2 text-sm bg-gradient-to-r from-primary-500 to-secondary-500 text-white rounded-md hover:from-primary-600 hover:to-secondary-600 disabled:opacity-50"
+                >
+                  デモでログイン
+                </button>
+              </div>
             </div>
           </form>
         </div>

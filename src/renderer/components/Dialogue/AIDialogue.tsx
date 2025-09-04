@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { geminiAPI, storage, isElectron, isWeb } from '../../utils/platform'
-import { setTasks, Task as ReduxTask } from '../../store/slices/tasksSlice'
+import { setTasks, addTask, Task as ReduxTask } from '../../store/slices/tasksSlice'
 import { addProject, setCurrentProject } from '../../store/slices/projectsSlice'
 import { setTeamMembers } from '../../store/slices/teamSlice'
 import type { GeneratedTask, DBTaskRow } from '../../../shared/types'
@@ -103,6 +103,28 @@ const AIDialogue: React.FC = () => {
   })
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  // 会話履歴の永続化（プロジェクト単位）
+  useEffect(() => {
+    try {
+      const key = `tf:dialogue:${currentProjectId || 'default'}:messages`
+      const saved = localStorage.getItem(key)
+      if (saved) {
+        const parsed = JSON.parse(saved) as Message[]
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setMessages(parsed.map(m => ({ ...m, timestamp: new Date(m.timestamp) })))
+        }
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentProjectId])
+
+  useEffect(() => {
+    try {
+      const key = `tf:dialogue:${currentProjectId || 'default'}:messages`
+      localStorage.setItem(key, JSON.stringify(messages))
+    } catch {}
+  }, [messages, currentProjectId])
 
   const suggestions = [
     { icon: Zap, text: '新しいWebサービスを開発したい', color: 'from-yellow-400 to-orange-500' },
@@ -381,6 +403,38 @@ API設定を確認するか、しばらく待ってから再度お試しくだ�
   }
 
   const onCreateProject = (name: string) => {
+    // 既存プロジェクトの再利用（同名・類似名の重複作成を防止）
+    const normalizeProjectName = (s: string) => (s || '')
+      .toLowerCase()
+      .replace(/[\s\u3000]/g, '')
+      .replace(/[、，。．・,\.\-_/\\()[\]{}【】]/g, '')
+      .replace(/プロジェクト$/u, '')
+      .trim()
+
+    const targetNorm = normalizeProjectName(name)
+    const existing = projects.find(p => normalizeProjectName(p.name) === targetNorm && (p as any).status !== 'archived')
+    if (existing) {
+      // 既存プロジェクトを再利用
+      dispatch(setCurrentProject(existing.id))
+      setMessages([
+        {
+          id: '1',
+          type: 'ai',
+          content: `既存のプロジェクト「${existing.name}」を使用します。\n\nこのプロジェクトのゴールや前提を教えてください。`,
+          timestamp: new Date(),
+          reactions: []
+        }
+      ])
+      setCurrentUserInput('')
+      setPendingTasks([])
+      setShowReview(false)
+      setTimeout(() => {
+        setShowProjectCreate(false)
+        setShowPlanningDialog(true)
+      }, 0)
+      return
+    }
+
     const id = `prj_${Date.now().toString(36)}`
     const project = {
       id,
@@ -694,16 +748,22 @@ ${requirementsSummary}
         console.log('No timeout to clear')
       }
 
-      console.log('Resetting UI state...')
-      setShowReview(false)
-      setPendingTasks([])
-      setIsApproving(false)
-      // 念のため強制的にボタン文言を戻すために微小遅延後に再評価
+      // Redux状態が更新されていることを確認してからUIをリセット
+      console.log('🔄 Ensuring Redux state is updated before UI reset')
+
+      // UI状態のリセットは少し遅延させてメッセージが表示されるのを待つ
       setTimeout(() => {
-        console.log('🔁 Ensuring isApproving=false after reset')
+        console.log('Resetting UI state after delay...')
+        setShowReview(false)
+        setPendingTasks([])
         setIsApproving(false)
-      }, 0)
-      console.log('UI state reset completed')
+        // 念のため強制的にボタン文言を戻すために微小遅延後に再評価
+        setTimeout(() => {
+          console.log('🔁 Ensuring isApproving=false after reset')
+          setIsApproving(false)
+        }, 0)
+        console.log('UI state reset completed')
+      }, 200) // 200ms遅延
 
       // エラーがあった場合の処理
       if (error) {
@@ -814,6 +874,7 @@ ${requirementsSummary}
       // タスクの作成を一つずつ処理
       let createdCount = 0
       const errors: string[] = []
+      const createdForRedux: ReduxTask[] = []
 
       for (let i = 0; i < toCreate.length; i++) {
         const t = toCreate[i]
@@ -902,11 +963,37 @@ ${requirementsSummary}
           console.log('📦 Final task data:', JSON.stringify(taskData, null, 2))
           console.log(`💾 Creating task ${i + 1}/${toCreate.length}: ${t.title}`)
 
-          await withTimeout(storage.saveTask(taskData), `save task "${t.title}"`)
+          const saveResult: any = await withTimeout(storage.saveTask(taskData), `save task "${t.title}"`)
+
+          if (saveResult && saveResult.success === false) {
+            const msg = saveResult.error || saveResult.message || 'Unknown error'
+            throw new Error(msg)
+          }
 
           createdCount++
           createdKeys.add(batchKey)
           console.log(`✅ Task ${i + 1} created successfully`)
+
+          // 即時UI反映用にReduxタスク形へマップしてバッファ
+          const reduxTask: ReduxTask = {
+            id: taskData.id,
+            projectId: taskData.projectId,
+            title: taskData.title,
+            description: taskData.description ?? '',
+            startDate: new Date(taskData.startDate),
+            endDate: new Date(taskData.endDate),
+            progress: 0,
+            priority: taskData.priority,
+            dependencies: taskData.dependencies || [],
+            status: taskData.status as any,
+            estimatedHours: taskData.estimatedHours ?? 0,
+            actualHours: taskData.actualHours ?? undefined,
+            assignee: taskData.assignee ?? undefined,
+            tags: taskData.tags || []
+          }
+          createdForRedux.push(reduxTask)
+          // 即時UI反映（後続でsetTasksにより置き換えられる可能性あり）
+          dispatch(addTask(reduxTask))
 
         } catch (saveErr) {
           const errorMsg = `Failed to save task "${t.title}": ${saveErr instanceof Error ? saveErr.message : 'Unknown error'}`
@@ -920,52 +1007,85 @@ ${requirementsSummary}
 
       // 承認後にDBから最新のタスクを取得してReduxへ反映
       console.log('🔄 === UPDATING REDUX STATE ===')
-      try {
-        console.log('⏳ Waiting 200ms for DB write completion')
-        await new Promise(resolve => setTimeout(resolve, 200))
 
-        console.log('📥 Fetching updated tasks from database')
-        const res = await withTimeout(
-          storage.getTasks(currentProjectId || 'default'),
-          'fetch updated tasks'
-        )
+      // Redux更新の完了を待ってからUIをリセットするためのPromise
+      const updateReduxAndResetUI = async () => {
+        try {
+          console.log('⏳ Waiting 200ms for DB write completion')
+          await new Promise(resolve => setTimeout(resolve, 200))
 
-        console.log('Fetch result:', res)
+          console.log('📥 Fetching updated tasks from database')
+          const res = await withTimeout(
+            storage.getTasks(currentProjectId || 'default'),
+            'fetch updated tasks'
+          )
 
-        if (res.success && res.data) {
-          console.log(`📊 Mapping ${res.data.length} tasks for Redux`)
-          const mapped: ReduxTask[] = res.data.map((row: any, index: number) => {
-            console.log(`Mapping task ${index + 1}:`, row.title)
-            return {
-              id: row.id,
-              projectId: row.projectId || (row as any).project_id || 'default',
-              title: row.title,
-              description: row.description ?? '',
-              startDate: new Date(row.startDate || row.start_date),
-              endDate: new Date(row.endDate || row.end_date),
-              progress: row.progress,
-              priority: row.priority,
-              dependencies: row.dependencies ?? [],
-              status: row.status,
-              estimatedHours: row.estimatedHours ?? row.estimated_hours ?? 0,
-              actualHours: row.actualHours ?? row.actual_hours ?? undefined,
-              assignee: row.assignee ?? undefined,
-              tags: row.tags ?? [],
+          console.log('Fetch result:', res)
+
+          if (res.success && res.data) {
+            console.log(`📊 Mapping ${res.data.length} tasks for Redux`)
+            const mapped: ReduxTask[] = res.data.map((row: any, index: number) => {
+              console.log(`Mapping task ${index + 1}:`, row.title)
+              return {
+                id: row.id,
+                projectId: row.projectId || (row as any).project_id || 'default',
+                title: row.title,
+                description: row.description ?? '',
+                startDate: new Date(row.startDate || row.start_date),
+                endDate: new Date(row.endDate || row.end_date),
+                progress: row.progress,
+                priority: row.priority,
+                dependencies: row.dependencies ?? [],
+                status: row.status,
+                estimatedHours: row.estimatedHours ?? row.estimated_hours ?? 0,
+                actualHours: row.actualHours ?? row.actual_hours ?? undefined,
+                assignee: row.assignee ?? undefined,
+                tags: row.tags ?? [],
+              }
+            })
+
+            // マージ結果が空の場合は、既存のRedux状態を維持（誤って消すのを防止）
+            const shouldMerge = (mapped.length > 0) || (createdForRedux.length > 0)
+            if (shouldMerge) {
+              // フェッチ結果と今回作成分をマージ（DB反映が遅延してもUIに必ず出す）
+              const mergedMap = new Map<string, ReduxTask>()
+              mapped.forEach(t => mergedMap.set(t.id, t))
+              createdForRedux.forEach(t => mergedMap.set(t.id, t))
+              const merged = Array.from(mergedMap.values())
+
+              console.log(`🚀 Dispatching setTasks with ${merged.length} merged tasks`)
+              console.log('Merged tasks:', merged.map(t => ({ id: t.id, title: t.title })))
+              dispatch(setTasks(merged))
+              console.log('✅ Redux state updated successfully (merged)')
+            } else {
+              console.warn('⚠️ Mapped and created arrays are empty. Keeping current Redux tasks to avoid clearing.')
             }
-          })
 
-          console.log(`🚀 Dispatching setTasks with ${mapped.length} tasks`)
-          console.log('Mapped tasks:', mapped.map(t => ({ id: t.id, title: t.title })))
-          dispatch(setTasks(mapped))
-          console.log('✅ Redux state updated successfully')
-        } else {
-          console.log('❌ No tasks to update or fetch failed')
+            // タスク画面へナビゲーション（ユーザーに結果を明示）
+            try {
+              window.dispatchEvent(new CustomEvent('tf:navigate', { detail: { section: 'tasks' } }))
+            } catch {}
+          } else {
+            console.log('❌ No tasks to update or fetch failed')
+            // フェッチ失敗時は作成分のみ即時反映（ダブり防止のためaddTaskで追加）
+            if (createdForRedux.length > 0) {
+              console.log(`▶️ Fallback: dispatching ${createdForRedux.length} created tasks via addTask`)
+              createdForRedux.forEach(ct => dispatch(addTask(ct)))
+              try {
+                window.dispatchEvent(new CustomEvent('tf:navigate', { detail: { section: 'tasks' } }))
+              } catch {}
+            }
+          }
+        } catch (fetchErr) {
+          console.error('❌ Failed to fetch updated tasks:', fetchErr)
+          // フェッチ失敗時も作成分を即時反映
+          if (createdForRedux.length > 0) {
+            console.log(`▶️ Fallback (catch): dispatching ${createdForRedux.length} created tasks via addTask`)
+            createdForRedux.forEach(ct => dispatch(addTask(ct)))
+          }
         }
-      } catch (fetchErr) {
-        console.error('❌ Failed to fetch updated tasks:', fetchErr)
-        // このエラーでは処理を中断しない
+        console.log('🔄 === REDUX UPDATE END ===')
       }
-      console.log('🔄 === REDUX UPDATE END ===')
 
       // 成功メッセージ
       console.log('📝 === FINALIZING TASK ACCEPTANCE ===')
@@ -986,6 +1106,12 @@ ${requirementsSummary}
           timestamp: new Date(),
           reactions: []
         }])
+
+        // Redux更新→UIリセット（即時実行でレースを回避）
+        console.log('🔄 Starting Redux update before UI reset')
+        await updateReduxAndResetUI()
+        console.log('✅ Redux update completed, now calling resetState')
+        resetState(true)
       } else if (toCreate.length === 0) {
         console.log('No tasks to create - adding warning message')
         setMessages(prev => [...prev, {
@@ -995,23 +1121,29 @@ ${requirementsSummary}
           timestamp: new Date(),
           reactions: []
         }])
+        console.log('🔄 Starting Redux update for no tasks case')
+        await updateReduxAndResetUI()
+        resetState(false, '作成可能なタスクが見つかりませんでした。')
+      } else {
+        // 作成数が0の場合もRedux更新してからUIをクリア
+        console.log('✅ Calling resetState for zero creation with Redux update')
+        await updateReduxAndResetUI()
+        resetState(true)
       }
 
       // エラーがあった場合の追加メッセージ
       if (errors.length > 0) {
         console.log('Adding error details to chat')
-        setMessages(prev => [...prev, {
-          id: `error-${Date.now()}`,
-          type: 'ai',
-          content: `⚠️ 以下のタスクでエラーが発生しました:\n${errors.slice(0, 3).map(e => `• ${e}`).join('\n')}${errors.length > 3 ? `\n...他${errors.length - 3}件` : ''}`,
-          timestamp: new Date(),
-          reactions: []
-        }])
+        setTimeout(() => {
+          setMessages(prev => [...prev, {
+            id: `error-${Date.now()}`,
+            type: 'ai',
+            content: `⚠️ 以下のタスクでエラーが発生しました:\n${errors.slice(0, 3).map(e => `• ${e}`).join('\n')}${errors.length > 3 ? `\n...他${errors.length - 3}件` : ''}`,
+            timestamp: new Date(),
+            reactions: []
+          }])
+        }, 500) // 成功メッセージより少し遅れて表示
       }
-
-      console.log('✅ Calling resetState with success=true')
-      // 正常完了
-      resetState(true)
 
       console.log('🔄 === TASK ACCEPTANCE END (SUCCESS) ===')
 
@@ -1022,6 +1154,13 @@ ${requirementsSummary}
       console.error('Error type:', typeof e)
       console.error('Error constructor:', e?.constructor?.name)
       console.error('Error stack:', e instanceof Error ? e.stack : 'No stack trace')
+
+      // エラー時も作成されたタスクをReduxに反映させてからUIをリセット
+      if (createdForRedux.length > 0) {
+        console.log('▶️ Error case: dispatching created tasks to Redux before reset')
+        createdForRedux.forEach(ct => dispatch(addTask(ct)))
+      }
+
       resetState(false, errorMsg)
     }
   }
