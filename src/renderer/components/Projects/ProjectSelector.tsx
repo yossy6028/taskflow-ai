@@ -122,7 +122,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
       // プラットフォームAPI
       const isElectronEnv = typeof window !== 'undefined' && !!(window as any).electronAPI
       const { storage } = await import('../../utils/platform')
-      const fb = await import('../../services/firebase').catch(() => null as any)
+      const fb = await import('../../../services/firebase').catch(() => null as any)
 
       for (const [_, arr] of groups) {
         if (arr.length <= 1) continue
