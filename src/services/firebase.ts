@@ -1,23 +1,23 @@
 import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  signInWithEmailAndPassword, 
+import {
+  getAuth,
+  signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   fetchSignInMethodsForEmail,
   signOut,
   onAuthStateChanged,
   User
 } from 'firebase/auth';
-import { 
-  getDatabase, 
-  ref, 
-  set, 
-  get, 
-  push, 
-  onValue, 
+import {
+  getDatabase,
+  ref,
+  set,
+  get,
+  push,
+  onValue,
   off,
   update,
-  remove 
+  remove
 } from 'firebase/database';
 
 // Firebase設定（環境変数から読み込み、厳格に検証）
@@ -27,7 +27,7 @@ const normalizeUrl = (url: string) => {
   try {
     // 既にエンコード済みの%20などを復元
     url = decodeURIComponent(url)
-  } catch {}
+  } catch { }
   // 空白（半角/全角）と%20を除去
   let s = url.replace(/\s+/g, '').replace(/%20/gi, '').replace(/[\u3000]/g, '')
   // よくあるタイポ: "asia-so   utheast1" のような分割を補正（so と utheast1 の間に任意空白）
@@ -37,45 +37,16 @@ const normalizeUrl = (url: string) => {
   return s
 }
 
-const readEnvValue = (key: string): string | undefined => {
-  try {
-    const metaEnv = (import.meta as any)?.env;
-    if (metaEnv && typeof metaEnv[key] === 'string') {
-      const value = (metaEnv[key] as string).trim();
-      if (value) {
-        return value;
-      }
-    }
-  } catch {}
-
-  if (typeof process !== 'undefined' && process.env && typeof process.env[key] === 'string') {
-    const value = (process.env[key] as string).trim();
-    if (value) {
-      return value;
-    }
-  }
-
-  return undefined;
-};
-
-const resolveFirebaseValue = (keys: string[]): string => {
-  for (const key of keys) {
-    const value = readEnvValue(key);
-    if (value) {
-      return value;
-    }
-  }
-  return '';
-};
-
+// Viteでは import.meta.env[key] のような動的アクセスがビルド時に正しく処理されないため、
+// 直接アクセスする必要があります
 const firebaseConfig = {
-  apiKey: resolveFirebaseValue(['VITE_FIREBASE_API_KEY', 'FIREBASE_API_KEY']),
-  authDomain: resolveFirebaseValue(['VITE_FIREBASE_AUTH_DOMAIN', 'FIREBASE_AUTH_DOMAIN']),
-  databaseURL: normalizeUrl(resolveFirebaseValue(['VITE_FIREBASE_DATABASE_URL', 'FIREBASE_DATABASE_URL'])),
-  projectId: resolveFirebaseValue(['VITE_FIREBASE_PROJECT_ID', 'FIREBASE_PROJECT_ID']),
-  storageBucket: resolveFirebaseValue(['VITE_FIREBASE_STORAGE_BUCKET', 'FIREBASE_STORAGE_BUCKET']),
-  messagingSenderId: resolveFirebaseValue(['VITE_FIREBASE_MESSAGING_SENDER_ID', 'FIREBASE_MESSAGING_SENDER_ID']),
-  appId: resolveFirebaseValue(['VITE_FIREBASE_APP_ID', 'FIREBASE_APP_ID'])
+  apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || '',
+  authDomain: (import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN || '',
+  databaseURL: normalizeUrl((import.meta as any).env?.VITE_FIREBASE_DATABASE_URL || ''),
+  projectId: (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || '',
+  storageBucket: (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET || '',
+  messagingSenderId: (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+  appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || ''
 };
 
 const missingFirebaseConfigKeys = Object.entries(firebaseConfig)
@@ -94,20 +65,13 @@ const isDevEnv = (() => {
 // デバッグ用（本番環境でもFirebase設定を確認）
 console.log('🔥 === FIREBASE CONFIGURATION DEBUG ===');
 console.log('Environment variables:', {
-  VITE_FIREBASE_API_KEY: !!readEnvValue('VITE_FIREBASE_API_KEY'),
-  FIREBASE_API_KEY: !!readEnvValue('FIREBASE_API_KEY'),
-  VITE_FIREBASE_AUTH_DOMAIN: !!readEnvValue('VITE_FIREBASE_AUTH_DOMAIN'),
-  FIREBASE_AUTH_DOMAIN: !!readEnvValue('FIREBASE_AUTH_DOMAIN'),
-  VITE_FIREBASE_DATABASE_URL: !!readEnvValue('VITE_FIREBASE_DATABASE_URL'),
-  FIREBASE_DATABASE_URL: !!readEnvValue('FIREBASE_DATABASE_URL'),
-  VITE_FIREBASE_PROJECT_ID: !!readEnvValue('VITE_FIREBASE_PROJECT_ID'),
-  FIREBASE_PROJECT_ID: !!readEnvValue('FIREBASE_PROJECT_ID'),
-  VITE_FIREBASE_STORAGE_BUCKET: !!readEnvValue('VITE_FIREBASE_STORAGE_BUCKET'),
-  FIREBASE_STORAGE_BUCKET: !!readEnvValue('FIREBASE_STORAGE_BUCKET'),
-  VITE_FIREBASE_MESSAGING_SENDER_ID: !!readEnvValue('VITE_FIREBASE_MESSAGING_SENDER_ID'),
-  FIREBASE_MESSAGING_SENDER_ID: !!readEnvValue('FIREBASE_MESSAGING_SENDER_ID'),
-  VITE_FIREBASE_APP_ID: !!readEnvValue('VITE_FIREBASE_APP_ID'),
-  FIREBASE_APP_ID: !!readEnvValue('FIREBASE_APP_ID')
+  VITE_FIREBASE_API_KEY: !!(import.meta as any).env?.VITE_FIREBASE_API_KEY,
+  VITE_FIREBASE_AUTH_DOMAIN: !!(import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN,
+  VITE_FIREBASE_DATABASE_URL: !!(import.meta as any).env?.VITE_FIREBASE_DATABASE_URL,
+  VITE_FIREBASE_PROJECT_ID: !!(import.meta as any).env?.VITE_FIREBASE_PROJECT_ID,
+  VITE_FIREBASE_STORAGE_BUCKET: !!(import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET,
+  VITE_FIREBASE_MESSAGING_SENDER_ID: !!(import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  VITE_FIREBASE_APP_ID: !!(import.meta as any).env?.VITE_FIREBASE_APP_ID
 });
 console.log('Final Firebase config:', {
   apiKey: firebaseConfig.apiKey ? '***configured***' : 'missing',
@@ -202,7 +166,7 @@ export const firebaseAuth = {
             if (methods && !methods.includes('password')) {
               return { success: false, error: 'Email/Password sign-in is disabled in Firebase.', code: 'auth/operation-not-allowed' } as any;
             }
-          } catch (_) {}
+          } catch (_) { }
 
           const created = await createUserWithEmailAndPassword(auth, email, password);
           return { success: true, user: created.user };
@@ -236,7 +200,7 @@ export const firebaseAuth = {
   onAuthStateChange: (callback: (user: User | null) => void) => {
     if (!auth) {
       callback(null);
-      return () => {};
+      return () => { };
     }
     return onAuthStateChanged(auth, callback);
   },
@@ -456,21 +420,21 @@ export const syncWithFirebase = {
   uploadLocalData: async (userId: string, localData: any) => {
     try {
       const updates: any = {};
-      
+
       // タスクの同期
       if (localData.tasks) {
         Object.keys(localData.tasks).forEach(taskId => {
           updates[`users/${userId}/tasks/${taskId}`] = localData.tasks[taskId];
         });
       }
-      
+
       // プロジェクトの同期
       if (localData.projects) {
         Object.keys(localData.projects).forEach(projectId => {
           updates[`users/${userId}/projects/${projectId}`] = localData.projects[projectId];
         });
       }
-      
+
       await update(ref(database), updates);
       return { success: true };
     } catch (error: any) {
