@@ -359,7 +359,10 @@ export const storage = {
 
   async saveProject(project: any) {
     if (isElectron()) {
-      // Electron: SQLite経由
+      if (!window.electronAPI?.dbSaveProject) {
+        console.warn('dbSaveProject is not exposed via Electron preload; skipping project persistence.');
+        return { success: false, error: 'Project persistence is not supported in the desktop build yet.' };
+      }
       return window.electronAPI.dbSaveProject(project);
     } else {
       // Web: Firebase経由
@@ -374,7 +377,10 @@ export const storage = {
 
   async getProjects() {
     if (isElectron()) {
-      // Electron: SQLite経由
+      if (!window.electronAPI?.dbGetProjects) {
+        console.warn('dbGetProjects is not exposed via Electron preload; returning empty project list.');
+        return { success: false, error: 'Project listing is not supported in the desktop build yet.', data: [] };
+      }
       return window.electronAPI.dbGetProjects();
     } else {
       // Web: Firebase経由
@@ -392,7 +398,10 @@ export const storage = {
 
   async saveChatMessage(conversationId: string, message: any) {
     if (isElectron()) {
-      // Electron: SQLite経由
+      if (!window.electronAPI?.dbSaveChatMessage) {
+        console.warn('dbSaveChatMessage is not exposed via Electron preload; chat history will not persist.');
+        return { success: false, error: 'Chat persistence is not supported in the desktop build yet.' };
+      }
       return window.electronAPI.dbSaveChatMessage({ conversationId, ...message });
     } else {
       // Web: Firebase経由
@@ -407,7 +416,10 @@ export const storage = {
 
   async getChatHistory(conversationId: string) {
     if (isElectron()) {
-      // Electron: SQLite経由
+      if (!window.electronAPI?.dbGetChatHistory) {
+        console.warn('dbGetChatHistory is not exposed via Electron preload; returning empty chat history.');
+        return { success: false, error: 'Chat history retrieval is not supported in the desktop build yet.', data: [] };
+      }
       return window.electronAPI.dbGetChatHistory(conversationId);
     } else {
       // Web: Firebase経由
@@ -421,5 +433,6 @@ export const storage = {
       }
       return { success: false, error: 'Not authenticated', data: [] };
     }
+
   }
 };

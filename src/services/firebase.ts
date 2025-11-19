@@ -20,7 +20,7 @@ import {
   remove 
 } from 'firebase/database';
 
-// Firebase設定（環境変数から読み込み、フォールバック付き）
+// Firebase設定（環境変数から読み込み、厳格に検証）
 // URLに混入した空白・%20・全角空白・誤ったリージョン表記などを除去/補正
 const normalizeUrl = (url: string) => {
   if (!url) return url
@@ -37,40 +37,91 @@ const normalizeUrl = (url: string) => {
   return s
 }
 
-const firebaseConfig = {
-  apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || 'AIzaSyDJxpnAO-mf-Y-AVHu3BEOfFQNVlrEXq1g',
-  authDomain: (import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN || 'taskflow-ai-dc492.firebaseapp.com',
-  databaseURL: normalizeUrl((import.meta as any).env?.VITE_FIREBASE_DATABASE_URL) || 'https://taskflow-ai-dc492-default-rtdb.asia-southeast1.firebasedatabase.app',
-  projectId: (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || 'taskflow-ai-dc492',
-  storageBucket: (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET || 'taskflow-ai-dc492.firebasestorage.app',
-  messagingSenderId: (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '829585643084',
-  appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || '1:829585643084:web:e50f81208640b3518006e9'
+const readEnvValue = (key: string): string | undefined => {
+  try {
+    const metaEnv = (import.meta as any)?.env;
+    if (metaEnv && typeof metaEnv[key] === 'string') {
+      const value = (metaEnv[key] as string).trim();
+      if (value) {
+        return value;
+      }
+    }
+  } catch {}
+
+  if (typeof process !== 'undefined' && process.env && typeof process.env[key] === 'string') {
+    const value = (process.env[key] as string).trim();
+    if (value) {
+      return value;
+    }
+  }
+
+  return undefined;
 };
+
+const resolveFirebaseValue = (keys: string[]): string => {
+  for (const key of keys) {
+    const value = readEnvValue(key);
+    if (value) {
+      return value;
+    }
+  }
+  return '';
+};
+
+const firebaseConfig = {
+  apiKey: resolveFirebaseValue(['VITE_FIREBASE_API_KEY', 'FIREBASE_API_KEY']),
+  authDomain: resolveFirebaseValue(['VITE_FIREBASE_AUTH_DOMAIN', 'FIREBASE_AUTH_DOMAIN']),
+  databaseURL: normalizeUrl(resolveFirebaseValue(['VITE_FIREBASE_DATABASE_URL', 'FIREBASE_DATABASE_URL'])),
+  projectId: resolveFirebaseValue(['VITE_FIREBASE_PROJECT_ID', 'FIREBASE_PROJECT_ID']),
+  storageBucket: resolveFirebaseValue(['VITE_FIREBASE_STORAGE_BUCKET', 'FIREBASE_STORAGE_BUCKET']),
+  messagingSenderId: resolveFirebaseValue(['VITE_FIREBASE_MESSAGING_SENDER_ID', 'FIREBASE_MESSAGING_SENDER_ID']),
+  appId: resolveFirebaseValue(['VITE_FIREBASE_APP_ID', 'FIREBASE_APP_ID'])
+};
+
+const missingFirebaseConfigKeys = Object.entries(firebaseConfig)
+  .filter(([, value]) => !value)
+  .map(([key]) => key);
+
+const isDevEnv = (() => {
+  try {
+    return Boolean((import.meta as any)?.env?.DEV);
+  } catch {
+    return false;
+  }
+})();
+
 
 // デバッグ用（本番環境でもFirebase設定を確認）
 console.log('🔥 === FIREBASE CONFIGURATION DEBUG ===');
 console.log('Environment variables:', {
-  VITE_FIREBASE_API_KEY: !!import.meta.env.VITE_FIREBASE_API_KEY,
-  VITE_FIREBASE_AUTH_DOMAIN: !!import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  VITE_FIREBASE_DATABASE_URL: !!import.meta.env.VITE_FIREBASE_DATABASE_URL,
-  VITE_FIREBASE_PROJECT_ID: !!import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  VITE_FIREBASE_STORAGE_BUCKET: !!import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  VITE_FIREBASE_MESSAGING_SENDER_ID: !!import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  VITE_FIREBASE_APP_ID: !!import.meta.env.VITE_FIREBASE_APP_ID
+  VITE_FIREBASE_API_KEY: !!readEnvValue('VITE_FIREBASE_API_KEY'),
+  FIREBASE_API_KEY: !!readEnvValue('FIREBASE_API_KEY'),
+  VITE_FIREBASE_AUTH_DOMAIN: !!readEnvValue('VITE_FIREBASE_AUTH_DOMAIN'),
+  FIREBASE_AUTH_DOMAIN: !!readEnvValue('FIREBASE_AUTH_DOMAIN'),
+  VITE_FIREBASE_DATABASE_URL: !!readEnvValue('VITE_FIREBASE_DATABASE_URL'),
+  FIREBASE_DATABASE_URL: !!readEnvValue('FIREBASE_DATABASE_URL'),
+  VITE_FIREBASE_PROJECT_ID: !!readEnvValue('VITE_FIREBASE_PROJECT_ID'),
+  FIREBASE_PROJECT_ID: !!readEnvValue('FIREBASE_PROJECT_ID'),
+  VITE_FIREBASE_STORAGE_BUCKET: !!readEnvValue('VITE_FIREBASE_STORAGE_BUCKET'),
+  FIREBASE_STORAGE_BUCKET: !!readEnvValue('FIREBASE_STORAGE_BUCKET'),
+  VITE_FIREBASE_MESSAGING_SENDER_ID: !!readEnvValue('VITE_FIREBASE_MESSAGING_SENDER_ID'),
+  FIREBASE_MESSAGING_SENDER_ID: !!readEnvValue('FIREBASE_MESSAGING_SENDER_ID'),
+  VITE_FIREBASE_APP_ID: !!readEnvValue('VITE_FIREBASE_APP_ID'),
+  FIREBASE_APP_ID: !!readEnvValue('FIREBASE_APP_ID')
 });
 console.log('Final Firebase config:', {
   apiKey: firebaseConfig.apiKey ? '***configured***' : 'missing',
-  authDomain: firebaseConfig.authDomain,
-  databaseURL: firebaseConfig.databaseURL,
-  projectId: firebaseConfig.projectId,
-  storageBucket: firebaseConfig.storageBucket,
-  messagingSenderId: firebaseConfig.messagingSenderId,
+  authDomain: firebaseConfig.authDomain || 'missing',
+  databaseURL: firebaseConfig.databaseURL || 'missing',
+  projectId: firebaseConfig.projectId || 'missing',
+  storageBucket: firebaseConfig.storageBucket || 'missing',
+  messagingSenderId: firebaseConfig.messagingSenderId || 'missing',
   appId: firebaseConfig.appId ? '***configured***' : 'missing'
 });
 console.log('====================================');
 
 // デバッグ用（開発環境でのみ表示）
-if ((import.meta as any).env?.DEV) {
+if (isDevEnv) {
   console.log('Firebase Config:', {
     ...firebaseConfig,
     apiKey: firebaseConfig.apiKey ? '***' : 'missing'
@@ -83,6 +134,9 @@ let auth;
 let database;
 
 try {
+  if (missingFirebaseConfigKeys.length > 0) {
+    throw new Error(`Missing Firebase configuration values: ${missingFirebaseConfigKeys.join(', ')}`);
+  }
   console.log('🔥 Initializing Firebase app...');
   app = initializeApp(firebaseConfig);
   console.log('✅ Firebase app initialized successfully');
@@ -101,7 +155,11 @@ try {
   console.error('❌ Error details:', {
     message: error instanceof Error ? error.message : 'Unknown error',
     stack: error instanceof Error ? error.stack : 'No stack trace',
-    config: firebaseConfig
+    missingKeys: missingFirebaseConfigKeys,
+    config: {
+      ...firebaseConfig,
+      apiKey: firebaseConfig.apiKey ? '***configured***' : 'missing'
+    }
   });
   // フォールバック設定
   app = null as any;

@@ -5,6 +5,11 @@ import { JSDOM } from 'jsdom';
 
 config();
 
+const DEFAULT_GEMINI_MODEL_ID = 'gemini-1.5-flash';
+const DEFAULT_MAX_RETRIES = 3;
+const DEFAULT_BASE_DELAY_MS = 400;
+const DEFAULT_REQUEST_TIMEOUT_MS = 45000;
+
 class GeminiService {
   private genAI: GoogleGenerativeAI;
   private model: GenerativeModel | null = null;
@@ -31,7 +36,7 @@ class GeminiService {
     try {
       this.genAI = new GoogleGenerativeAI(apiKey);
       // Gemini 1.5 Flash を使用（高速で低コスト）
-      this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      this.model = this.genAI.getGenerativeModel({ model: DEFAULT_GEMINI_MODEL_ID });
       
       // Initialize DOMPurify
       const window = new JSDOM('').window;
@@ -60,6 +65,39 @@ class GeminiService {
     });
   }
 
+  // 指数バックオフ付きリトライユーティリティ
+  private async retryWithBackoff<T>(operation: () => Promise<T>, options?: { retries?: number; baseDelayMs?: number; timeoutMs?: number }): Promise<T> {
+    const retries = Math.max(0, options?.retries ?? DEFAULT_MAX_RETRIES);
+    const baseDelayMs = Math.max(0, options?.baseDelayMs ?? DEFAULT_BASE_DELAY_MS);
+    const timeoutMs = Math.max(0, options?.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const result = await Promise.race([
+          operation(),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs))
+        ]);
+        return result;
+      } catch (error: any) {
+        lastError = error;
+        const isTimeout = typeof error?.message === 'string' && error.message.toLowerCase().includes('timeout');
+        const isNetwork = typeof error?.message === 'string' && (
+          error.message.toLowerCase().includes('network') ||
+          error.message.toLowerCase().includes('fetch') ||
+          error.message.toLowerCase().includes('connection')
+        );
+        const isRetriable = isTimeout || isNetwork || error?.code === 'RESOURCE_EXHAUSTED' || error?.code === 'UNAVAILABLE';
+        if (attempt === retries || !isRetriable) {
+          throw error;
+        }
+        const delay = baseDelayMs * Math.pow(2, attempt) + Math.floor(Math.random() * baseDelayMs);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+    // 型上ここには来ないが、保険で投げる
+    throw lastError instanceof Error ? lastError : new Error('Unknown error');
+  }
+
   async generateTaskBreakdown(userInput: string, context: any = {}) {
     this.checkInitialization();
     
@@ -78,11 +116,13 @@ class GeminiService {
     const prompt = this.createTaskBreakdownPrompt(sanitizedInput, context);
     
     try {
-      const result = await (this.model as GenerativeModel).generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
-      
-      return this.parseTaskResponse(text);
+      const exec = async () => {
+        const result = await (this.model as GenerativeModel).generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+        return this.parseTaskResponse(text);
+      };
+      return await this.retryWithBackoff(exec);
     } catch (error: unknown) {
       console.error('Gemini API Error:', error);
       // APIキーを含むエラーメッセージを隠蔽
@@ -134,9 +174,12 @@ class GeminiService {
     const fullPrompt = `${systemPrompt}\n\n過去の会話:\n${conversationContext}\n\nユーザー: ${sanitizedMessage}\n\nアシスタント:`;
 
     try {
-      const result = await (this.model as GenerativeModel).generateContent(fullPrompt);
-      const response = await result.response;
-      return response.text();
+      const exec = async () => {
+        const result = await (this.model as GenerativeModel).generateContent(fullPrompt);
+        const response = await result.response;
+        return response.text();
+      };
+      return await this.retryWithBackoff(exec);
     } catch (error) {
       console.error('Gemini Chat Error:', error);
       throw error;
@@ -239,9 +282,12 @@ ${JSON.stringify(tasks, null, 2)}
 }`;
 
     try {
-      const result = await (this.model as GenerativeModel).generateContent(prompt);
-      const response = await result.response;
-      return this.parseTaskResponse(response.text());
+      const exec = async () => {
+        const result = await (this.model as GenerativeModel).generateContent(prompt);
+        const response = await result.response;
+        return this.parseTaskResponse(response.text());
+      };
+      return await this.retryWithBackoff(exec);
     } catch (error) {
       console.error('Dependency analysis error:', error);
       throw error;

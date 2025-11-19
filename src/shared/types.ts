@@ -84,28 +84,34 @@ export interface DependencyAnalysis {
 
 export interface ElectronAPI {
   // Gemini AI APIs - 実装済み
-  geminiChat: (prompt: string, conversationHistory?: ConversationMessage[]) => 
+  geminiChat: (prompt: string, conversationHistory?: ConversationMessage[]) =>
     Promise<{ success: boolean; message: string }>;
-  geminiBreakdown: (userInput: string, context?: TaskBreakdownContext) => 
+  geminiBreakdown: (userInput: string, context?: TaskBreakdownContext) =>
     Promise<{ success: boolean; data?: TaskBreakdownResult; message?: string }>;
-  geminiAnalyzeDependencies: (tasks: Task[]) => 
+  geminiAnalyzeDependencies: (tasks: Task[]) =>
     Promise<{ success: boolean; data?: DependencyAnalysis; message?: string }>;
   geminiBreakdownEnriched: (userInput: string, context?: TaskBreakdownContext) =>
     Promise<{ success: boolean; data?: TaskBreakdownResult; message?: string }>;
   geminiBreakdownTask: (params: { title: string; targetCount?: number }) =>
     Promise<{ success: boolean; data?: { todos: Array<{ title: string; description: string }> }; message?: string }>;
-  
+
   // DB APIs
   dbGetTasks: (filter?: Partial<Task>) => Promise<{ success: boolean; data?: DBTaskRow[]; message?: string }>;
   dbCreateTask: (task: Partial<Task>) => Promise<{ success: boolean; data?: Task; message?: string }>;
   dbUpdateTask: (id: string, updates: Partial<Task>) => Promise<{ success: boolean; message?: string }>;
   dbDeleteTask: (id: string) => Promise<{ success: boolean; message?: string }>;
-  
+
+  // Project & Chat APIs (Optional/Future)
+  dbGetProjects?: () => Promise<{ success: boolean; data?: any[]; error?: string }>;
+  dbSaveProject?: (project: any) => Promise<{ success: boolean; error?: string }>;
+  dbGetChatHistory?: (conversationId: string) => Promise<{ success: boolean; data?: any[]; error?: string }>;
+  dbSaveChatMessage?: (message: any) => Promise<{ success: boolean; error?: string }>;
+
   // Future implementations - コメントアウト
   // dbQuery: (query: string, params: any[]) => Promise<{ success: boolean; data: any[] }>;
   // selectFile: () => Promise<string | null>;
   // saveFile: (data: any) => Promise<boolean>;
-  
+
   // System info - 読み取り専用
   platform: string;
   version: string;

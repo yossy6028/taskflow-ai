@@ -234,10 +234,20 @@ ipcMain.handle('gemini:breakdown', async (event: IpcMainInvokeEvent, userInput: 
     
     let userMessage = 'Failed to breakdown tasks. Please try again.';
     
-    if ((error as { message?: string }).message === 'Request timeout') {
+    const rawMessage = (error as { message?: string }).message || '';
+    if (rawMessage === 'Request timeout') {
       userMessage = 'Task analysis took too long. Please try with a simpler description.';
-    } else if ((error as { message?: string }).message?.includes('limit')) {
-      userMessage = (error as { message?: string }).message as string;
+    } else if (rawMessage.toLowerCase().includes('network') || rawMessage.toLowerCase().includes('connection') || rawMessage.toLowerCase().includes('fetch')) {
+      userMessage = 'ネットワークエラーが発生しました。インターネット接続を確認してください。';
+    } else if (rawMessage.toLowerCase().includes('permission') || rawMessage.includes('PERMISSION_DENIED')) {
+      userMessage = 'APIアクセス権限がありません。APIキーの権限を確認してください。';
+    } else if (rawMessage.toLowerCase().includes('quota') || rawMessage.includes('RESOURCE_EXHAUSTED')) {
+      userMessage = 'APIの利用制限を超過しました。しばらく待ってから再試行してください。';
+    } else if (rawMessage.toLowerCase().includes('limit')) {
+      userMessage = rawMessage;
+    } else if (rawMessage) {
+      // 具体的なメッセージがある場合はそれを優先
+      userMessage = rawMessage;
     }
     
     return { success: false, message: userMessage };
@@ -297,24 +307,10 @@ ipcMain.handle('gemini:breakdown-enriched', async (event: IpcMainInvokeEvent, us
     }
 
     return { success: true, data: enriched };
-  } catch (error: unknown) {
-    console.error('Enriched breakdown error:', error);
-    const msg = typeof error === 'object' && error !== null && 'message' in (error as { message?: string }) ? (error as { message?: string }).message : 'Failed to enrich breakdown';
-    return { success: false, message: msg };
-  }
-});
 
-ipcMain.handle('gemini:analyze-dependencies', async (event: IpcMainInvokeEvent, tasks: Array<Pick<SharedTask, 'id' | 'title' | 'dependencies'>>) => {
-  try {
-    if (!geminiService) {
-      throw new Error('Gemini service not initialized');
-    }
-    
-    const analysis = await geminiService.analyzeDependencies(tasks as unknown as SharedTask[]);
-    return { success: true, data: analysis };
   } catch (error: unknown) {
-    console.error('Dependency analysis error:', error);
-    const msg = typeof error === 'object' && error !== null && 'message' in (error as { message?: string }) ? (error as { message?: string }).message : 'Failed to analyze dependencies';
+    console.error('Task breakdown error:', error);
+    const msg = typeof error === 'object' && error !== null && 'message' in error ? (error as { message: string }).message : 'Unknown error';
     return { success: false, message: msg };
   }
 });
@@ -325,7 +321,7 @@ ipcMain.handle('gemini:breakdown-task', async (event: IpcMainInvokeEvent, params
     if (!geminiService) {
       throw new Error('Gemini service not initialized');
     }
-    
+
     const prompt = `
 タスク「${params.title}」を${params.targetCount || 8}個の具体的で実行可能なTODOに細分化してください。
 
@@ -359,37 +355,76 @@ ipcMain.handle('gemini:breakdown-task', async (event: IpcMainInvokeEvent, params
   ]
 }
 `;
-
     const result = await geminiService.chatWithContext(prompt, []);
-    
-    try {
-      // JSONの抽出と解析
-      const jsonMatch = result.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return { success: true, data: parsed };
-      }
-      return { success: false, message: 'No valid JSON found in response' };
-    } catch (parseError) {
-      console.error('Failed to parse TODOs:', parseError);
-      return { success: false, message: 'Failed to parse response' };
-    }
-    
-    // フォールバックTODO生成
+
     const fallbackTodos = {
       todos: [
-        { title: "要件の詳細確認", description: "タスクの詳細要件を確認し、不明点を洗い出す" },
-        { title: "計画の作成", description: "実装計画を立てる" },
-        { title: "必要なリソースの準備", description: "必要なツール、データ、環境を準備する" },
-        { title: "メイン作業の実施", description: "タスクのメイン作業を実施する" },
-        { title: "確認とテスト", description: "作業結果を確認し、テストを行う" },
-        { title: "ドキュメント作成", description: "必要なドキュメントを作成する" },
-        { title: "レビュー依頼", description: "関係者にレビューを依頼する" },
-        { title: "最終確認と完了", description: "最終確認を行い、タスクを完了する" }
+        { title: '要件の詳細確認', description: 'タスクの詳細要件を確認し、不明点を洗い出す' },
+        { title: '計画の作成', description: '実装計画を立てる' },
+        { title: '必要なリソースの準備', description: '必要なツール、データ、環境を準備する' },
+        { title: 'メイン作業の実施', description: 'タスクのメイン作業を実施する' },
+        { title: '確認とテスト', description: '作業結果を確認し、テストを行う' },
+        { title: 'ドキュメント作成', description: '必要なドキュメントを作成する' },
+        { title: 'レビュー依頼', description: '関係者にレビューを依頼する' },
+        { title: '最終確認と完了', description: '最終確認を行い、タスクを完了する' }
       ]
     };
-    
-    return { success: true, data: fallbackTodos };
+
+    const candidates: string[] = [];
+    const lowerResult = result.toLowerCase();
+    const jsonFence = '```json';
+    const fenceIndex = lowerResult.indexOf(jsonFence);
+    if (fenceIndex !== -1) {
+      const fenceEnd = fenceIndex + jsonFence.length;
+      const closingFence = lowerResult.indexOf('```', fenceEnd);
+      if (closingFence !== -1) {
+        const snippet = result.slice(fenceEnd, closingFence).trim();
+        if (snippet) {
+          candidates.push(snippet);
+        }
+      }
+    }
+
+    const firstBrace = result.indexOf('{');
+    const lastBrace = result.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      const snippet = result.slice(firstBrace, lastBrace + 1).trim();
+      if (snippet) {
+        candidates.push(snippet);
+      }
+    }
+
+    candidates.push(result);
+
+    let parsedResponse: unknown;
+    let lastParseError: unknown;
+
+    for (const candidate of candidates) {
+      try {
+        const parsedCandidate = JSON.parse(candidate);
+        if (parsedCandidate && typeof parsedCandidate === 'object') {
+          parsedResponse = parsedCandidate;
+          break;
+        }
+      } catch (err) {
+        lastParseError = err;
+      }
+    }
+
+    if (parsedResponse && typeof parsedResponse === 'object') {
+      return { success: true, data: parsedResponse };
+    }
+
+    if (lastParseError) {
+      console.error('Failed to parse TODOs:', lastParseError);
+    }
+    console.warn('Gemini TODO response did not contain valid JSON. Using fallback template.');
+
+    return {
+      success: true,
+      data: fallbackTodos,
+      message: 'Fallback TODOs generated because the AI response was not valid JSON.'
+    };
   } catch (error: unknown) {
     console.error('Task breakdown error:', error);
     const msg = typeof error === 'object' && error !== null && 'message' in error ? (error as { message: string }).message : 'Unknown error';
@@ -454,7 +489,7 @@ ipcMain.handle('db:updateTask', async (event: IpcMainInvokeEvent, id: string, up
     }
     
     // 更新データの検証
-    const validation = validateTaskInput({ ...updates, title: updates.title || 'dummy' });
+    const validation = validateTaskInput(updates, { requireTitle: false });
     if (!validation.valid) {
       return { success: false, message: validation.message };
     }

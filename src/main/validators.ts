@@ -3,20 +3,26 @@ import { Task } from '../shared/types';
 /**
  * タスクデータの検証
  */
-export function validateTaskInput(task: unknown): { valid: boolean; message?: string; data?: Partial<Task> } {
+export function validateTaskInput(task: unknown, options?: { requireTitle?: boolean }): { valid: boolean; message?: string; data?: Partial<Task> } {
   if (!task || typeof task !== 'object') {
     return { valid: false, message: 'Invalid task data' };
   }
   const t = task as Record<string, unknown>;
+  const requireTitle = options?.requireTitle ?? true;
 
   // 必須フィールドの検証
-  if (!t.title || typeof t.title !== 'string' || t.title.trim().length === 0) {
+  if (t.title !== undefined) {
+    if (typeof t.title !== 'string' || t.title.trim().length === 0) {
+      return { valid: false, message: 'Task title is required' };
+    }
+
+    if ((t.title as string).length > 200) {
+      return { valid: false, message: 'Task title must be less than 200 characters' };
+    }
+  } else if (requireTitle) {
     return { valid: false, message: 'Task title is required' };
   }
 
-  if ((t.title as string).length > 200) {
-    return { valid: false, message: 'Task title must be less than 200 characters' };
-  }
 
   // 日付の検証
   if (t.startDate) {
