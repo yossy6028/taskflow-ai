@@ -37,16 +37,15 @@ const normalizeUrl = (url: string) => {
   return s
 }
 
-// Viteでは import.meta.env[key] のような動的アクセスがビルド時に正しく処理されないため、
-// 直接アクセスする必要があります
+// Viteのビルド時静的解析のため、型キャストなしで直接アクセスする必要があります
 const firebaseConfig = {
-  apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || '',
-  authDomain: (import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN || '',
-  databaseURL: normalizeUrl((import.meta as any).env?.VITE_FIREBASE_DATABASE_URL || ''),
-  projectId: (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || '',
-  storageBucket: (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || ''
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
+  databaseURL: normalizeUrl(import.meta.env.VITE_FIREBASE_DATABASE_URL || ''),
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || ''
 };
 
 const missingFirebaseConfigKeys = Object.entries(firebaseConfig)
@@ -65,13 +64,13 @@ const isDevEnv = (() => {
 // デバッグ用（本番環境でもFirebase設定を確認）
 console.log('🔥 === FIREBASE CONFIGURATION DEBUG ===');
 console.log('Environment variables:', {
-  VITE_FIREBASE_API_KEY: !!(import.meta as any).env?.VITE_FIREBASE_API_KEY,
-  VITE_FIREBASE_AUTH_DOMAIN: !!(import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN,
-  VITE_FIREBASE_DATABASE_URL: !!(import.meta as any).env?.VITE_FIREBASE_DATABASE_URL,
-  VITE_FIREBASE_PROJECT_ID: !!(import.meta as any).env?.VITE_FIREBASE_PROJECT_ID,
-  VITE_FIREBASE_STORAGE_BUCKET: !!(import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET,
-  VITE_FIREBASE_MESSAGING_SENDER_ID: !!(import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  VITE_FIREBASE_APP_ID: !!(import.meta as any).env?.VITE_FIREBASE_APP_ID
+  VITE_FIREBASE_API_KEY: !!import.meta.env.VITE_FIREBASE_API_KEY,
+  VITE_FIREBASE_AUTH_DOMAIN: !!import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  VITE_FIREBASE_DATABASE_URL: !!import.meta.env.VITE_FIREBASE_DATABASE_URL,
+  VITE_FIREBASE_PROJECT_ID: !!import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  VITE_FIREBASE_STORAGE_BUCKET: !!import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  VITE_FIREBASE_MESSAGING_SENDER_ID: !!import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  VITE_FIREBASE_APP_ID: !!import.meta.env.VITE_FIREBASE_APP_ID
 });
 console.log('Final Firebase config:', {
   apiKey: firebaseConfig.apiKey ? '***configured***' : 'missing',
