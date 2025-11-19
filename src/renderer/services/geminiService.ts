@@ -5,7 +5,7 @@ const API_KEY = import.meta.env.VITE_GEMINI_API_KEY ||
   import.meta.env.GEMINI_API_KEY || '';
 
 // モデルやリトライ関連のデフォルト設定（マジックナンバー排除）
-const DEFAULT_GEMINI_MODEL_ID = 'gemini-1.5-flash';
+const DEFAULT_GEMINI_MODEL_ID = 'gemini-2.5-flash';
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_BASE_DELAY_MS = 400;
 const DEFAULT_REQUEST_TIMEOUT_MS = 45000;
