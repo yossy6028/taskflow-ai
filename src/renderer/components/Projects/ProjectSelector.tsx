@@ -17,6 +17,7 @@ import {
   Calendar,
   Settings
 } from 'lucide-react'
+import { persistProjectToCloud } from '../../utils/projectSync'
 
 interface ProjectSelectorProps {
   compact?: boolean
@@ -87,6 +88,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
     dispatch(setCurrentProject(project.id))
     setShowCreateModal(false)
     setNewProject({ name: '', description: '', color: '#3B82F6', icon: '📁' })
+    void persistProjectToCloud(project)
   }
 
   const handleArchiveProject = (projectId: string) => {

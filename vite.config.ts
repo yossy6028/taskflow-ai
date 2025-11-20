@@ -4,6 +4,7 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react()],
+  envPrefix: ['VITE_', 'GEMINI_', 'FIREBASE_'],
   server: {
     port: 4000,
     host: true

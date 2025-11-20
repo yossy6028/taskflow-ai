@@ -37,20 +37,28 @@ const normalizeUrl = (url: string) => {
   return s
 }
 
-// Viteのビルド時静的解析のため、型キャストなしで直接アクセスする必要があります
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
-  databaseURL: normalizeUrl(import.meta.env.VITE_FIREBASE_DATABASE_URL || ''),
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || ''
-};
+const rawEnv = import.meta.env as ImportMetaEnv & Record<string, string | undefined>;
 
-const missingFirebaseConfigKeys = Object.entries(firebaseConfig)
-  .filter(([, value]) => !value)
-  .map(([key]) => key);
+const firebaseEnvFields = [
+  'API_KEY',
+  'AUTH_DOMAIN',
+  'DATABASE_URL',
+  'PROJECT_ID',
+  'STORAGE_BUCKET',
+  'MESSAGING_SENDER_ID',
+  'APP_ID'
+] as const;
+
+type FirebaseEnvField = typeof firebaseEnvFields[number];
+type FirebaseEnvSource = 'vite' | 'legacy' | 'missing';
+
+const firebaseEnvSourceDetails = firebaseEnvFields.reduce(
+  (acc, field) => ({
+    ...acc,
+    [field]: { source: 'missing' as FirebaseEnvSource } 
+  }),
+  {} as Record<FirebaseEnvField, { source: FirebaseEnvSource; usedKey?: string }>
+);
 
 const isDevEnv = (() => {
   try {
@@ -60,18 +68,59 @@ const isDevEnv = (() => {
   }
 })();
 
+const getFirebaseEnv = (field: FirebaseEnvField, options?: { normalizeUrl?: boolean }) => {
+  const baseKey = `FIREBASE_${field}`;
+  const viteKey = `VITE_${baseKey}`;
+  let value = rawEnv[viteKey];
+  let source: FirebaseEnvSource = 'missing';
+  let usedKey: string | undefined;
+
+  if (value) {
+    source = 'vite';
+    usedKey = viteKey;
+  } else if (rawEnv[baseKey]) {
+    value = rawEnv[baseKey];
+    source = 'legacy';
+    usedKey = baseKey;
+    if (isDevEnv) {
+      console.warn(`⚠️  Detected legacy Firebase env "${baseKey}". Rename it to "${viteKey}" for Vite web builds.`);
+    }
+  }
+
+  if (value && options?.normalizeUrl) {
+    value = normalizeUrl(value);
+  }
+
+  firebaseEnvSourceDetails[field] = { source, usedKey };
+  return value || '';
+};
+
+// Viteのビルド時静的解析のため、型キャストなしで直接アクセスする必要があります
+const firebaseConfig = {
+  apiKey: getFirebaseEnv('API_KEY'),
+  authDomain: getFirebaseEnv('AUTH_DOMAIN'),
+  databaseURL: getFirebaseEnv('DATABASE_URL', { normalizeUrl: true }),
+  projectId: getFirebaseEnv('PROJECT_ID'),
+  storageBucket: getFirebaseEnv('STORAGE_BUCKET'),
+  messagingSenderId: getFirebaseEnv('MESSAGING_SENDER_ID'),
+  appId: getFirebaseEnv('APP_ID')
+};
+
+const missingFirebaseConfigKeys = Object.entries(firebaseConfig)
+  .filter(([, value]) => !value)
+  .map(([key]) => key);
+
 
 // デバッグ用（本番環境でもFirebase設定を確認）
 console.log('🔥 === FIREBASE CONFIGURATION DEBUG ===');
-console.log('Environment variables:', {
-  VITE_FIREBASE_API_KEY: !!import.meta.env.VITE_FIREBASE_API_KEY,
-  VITE_FIREBASE_AUTH_DOMAIN: !!import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  VITE_FIREBASE_DATABASE_URL: !!import.meta.env.VITE_FIREBASE_DATABASE_URL,
-  VITE_FIREBASE_PROJECT_ID: !!import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  VITE_FIREBASE_STORAGE_BUCKET: !!import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  VITE_FIREBASE_MESSAGING_SENDER_ID: !!import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  VITE_FIREBASE_APP_ID: !!import.meta.env.VITE_FIREBASE_APP_ID
-});
+const firebaseEnvDebugInfo = firebaseEnvFields.reduce((acc, field) => {
+  const baseKey = `FIREBASE_${field}`;
+  const viteKey = `VITE_${baseKey}`;
+  acc[viteKey] = !!rawEnv[viteKey];
+  acc[baseKey] = !!rawEnv[baseKey];
+  return acc;
+}, {} as Record<string, boolean>);
+console.log('Environment variables:', firebaseEnvDebugInfo);
 console.log('Final Firebase config:', {
   apiKey: firebaseConfig.apiKey ? '***configured***' : 'missing',
   authDomain: firebaseConfig.authDomain || 'missing',
@@ -89,6 +138,7 @@ if (isDevEnv) {
     ...firebaseConfig,
     apiKey: firebaseConfig.apiKey ? '***' : 'missing'
   });
+  console.log('Firebase env source map:', firebaseEnvSourceDetails);
 }
 
 // Firebase初期化

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { geminiAPI, storage, isElectron, isWeb } from '../../utils/platform'
+import { persistProjectToCloud } from '../../utils/projectSync'
 import { setTasks, addTask, Task as ReduxTask } from '../../store/slices/tasksSlice'
 import { addProject, setCurrentProject } from '../../store/slices/projectsSlice'
 import { setTeamMembers } from '../../store/slices/teamSlice'
@@ -451,6 +452,7 @@ API設定を確認するか、しばらく待ってから再度お試しくだ�
     }
     dispatch(addProject(project))
     dispatch(setCurrentProject(project.id))
+    void persistProjectToCloud(project)
     // 直前の会話文脈や生成ドラフトを完全リセット（前プロジェクトの影響を排除）
     setMessages([
       {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { geminiAPI } from '../../utils/platform'
+import React, { useEffect, useState } from 'react'
+import { geminiAPI, storage, isElectron } from '../../utils/platform'
 import { useDispatch, useSelector } from 'react-redux'
 import { RootState } from '../../store'
 import { updateTask as updateReduxTask } from '../../store/slices/tasksSlice'
@@ -72,11 +73,38 @@ const TaskBreakdown: React.FC<TaskBreakdownProps> = ({ taskId, taskTitle, onGene
       status: nextStatus as any
     }))
 
-    // DBへ永続化（エラーは無視してUIは更新）
-    void window.electronAPI.dbUpdateTask(taskId, {
-      progress: completionRate,
-      status: nextStatus
-    } as any)
+    // DBへ永続化（プラットフォームに応じて保存。エラーは無視してUIは更新）
+    const electronAPI = typeof window !== 'undefined' ? (window as any).electronAPI : undefined
+    if (isElectron() && electronAPI && typeof electronAPI.dbUpdateTask === 'function') {
+      void electronAPI.dbUpdateTask(taskId, {
+        progress: completionRate,
+        status: nextStatus
+      } as any)
+    } else {
+      // Web/Firebase では上書き保存（必要最低限のフィールドのみ）
+      try {
+        const webTask = {
+          id: currentTask.id,
+          projectId: currentTask.projectId,
+          title: currentTask.title,
+          description: currentTask.description,
+          estimatedHours: currentTask.estimatedHours,
+          startDate: (currentTask.startDate instanceof Date ? currentTask.startDate : new Date(currentTask.startDate)).toISOString(),
+          endDate: (currentTask.endDate instanceof Date ? currentTask.endDate : new Date(currentTask.endDate)).toISOString(),
+          priority: currentTask.priority,
+          progress: completionRate,
+          dependencies: currentTask.dependencies || [],
+          tags: (currentTask as any).tags || [],
+          status: nextStatus as any,
+          assignee: (currentTask as any).assignee,
+          actualHours: (currentTask as any).actualHours,
+          updatedAt: new Date().toISOString()
+        }
+        void storage.saveTask(webTask as any)
+      } catch {
+        // 永続化失敗は無視（UIは更新済み）
+      }
+    }
   }, [completionRate, currentTask, dispatch, taskId, totalCount])
 
   // 初回マウント時に自動的にTODOを生成
@@ -102,19 +130,39 @@ const TaskBreakdown: React.FC<TaskBreakdownProps> = ({ taskId, taskTitle, onGene
 
       if (result.success && result.data) {
         console.log('Generated TODOs from AI:', result.data)
-        const generatedTodos: Todo[] = result.data.todos.map((todo: any, index: number) => ({
+
+        const aiTodos = (() => {
+          if (Array.isArray((result.data as any).todos)) return (result.data as any).todos
+          if (Array.isArray((result.data as any).subtasks)) return (result.data as any).subtasks
+          if (Array.isArray(result.data)) return result.data
+          return []
+        })()
+
+        const generatedTodos: Todo[] = aiTodos.map((todo: any, index: number) => ({
           id: `${taskId}-todo-${Date.now()}-${index}`,
           taskId,
-          title: todo.title,
+          title: todo.title || todo.name || `サブタスク${index + 1}`,
           description: todo.description,
           completed: false,
           order: index,
           createdAt: new Date()
         }))
 
-        console.log('Dispatching TODOs to store:', generatedTodos)
-        dispatch(setTodosForTask({ taskId, todos: generatedTodos }))
-        setIsExpanded(true) // 生成後に自動的に展開
+        if (generatedTodos.length > 0) {
+          console.log('Dispatching TODOs to store:', generatedTodos)
+          dispatch(setTodosForTask({ taskId, todos: generatedTodos }))
+          setIsExpanded(true) // 生成後に自動的に展開
+        } else {
+          console.error('AI response did not contain TODO list, falling back to defaults:', result.data)
+          const defaultTodos: Todo[] = [
+            { id: `${taskId}-todo-1`, taskId, title: `${taskTitle}に関する情報をWeb検索で収集`, description: 'Google、関連サイトで最新情報を調査', completed: false, order: 0, createdAt: new Date() },
+            { id: `${taskId}-todo-2`, taskId, title: `類似事例や参考資料を調査`, description: '競合分析、ベストプラクティスの確認', completed: false, order: 1, createdAt: new Date() },
+            { id: `${taskId}-todo-3`, taskId, title: `GensparkやChatGPTで初稿を生成`, description: 'AIツールを活用して基本構成を作成', completed: false, order: 2, createdAt: new Date() },
+            { id: `${taskId}-todo-4`, taskId, title: `内容をブラッシュアップ・編集`, description: '生成された内容を精査し改善', completed: false, order: 3, createdAt: new Date() },
+            { id: `${taskId}-todo-5`, taskId, title: `最終チェックと仕上げ`, description: '誤字脱字、内容の整合性を確認', completed: false, order: 4, createdAt: new Date() },
+          ]
+          dispatch(setTodosForTask({ taskId, todos: defaultTodos }))
+        }
       } else {
         console.error('Failed to generate TODOs:', result)
         // 失敗した場合はデフォルトのTODOを提案

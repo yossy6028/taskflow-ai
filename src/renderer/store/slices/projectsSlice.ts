@@ -28,7 +28,7 @@ export interface ProjectsState {
 }
 
 // デフォルトプロジェクト
-const defaultProject: Project = {
+export const createDefaultProject = (): Project => ({
   id: 'default',
   name: 'デフォルトプロジェクト',
   description: '全般的なタスクを管理するプロジェクト',
@@ -40,7 +40,9 @@ const defaultProject: Project = {
   members: ['自分'],
   createdAt: new Date(),
   updatedAt: new Date()
-}
+})
+
+const defaultProject = createDefaultProject()
 
 const initialState: ProjectsState = {
   projects: [defaultProject],

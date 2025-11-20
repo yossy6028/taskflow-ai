@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { geminiAPI } from '../../utils/platform'
+import { geminiAPI, storage, isElectron } from '../../utils/platform'
 import { motion } from 'framer-motion'
 import { 
   MessageSquare, 
@@ -53,21 +53,24 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   const [allTasks, setAllTasks] = useState<ReduxTask[]>([])
 
   const refreshTasks = async () => {
-    const res = await window.electronAPI.dbGetTasks({ projectId: currentProjectId || 'default' })
+    // Cross-platform fetch (Electron → SQLite, Web → Firebase/LocalStorage)
+    const res = isElectron()
+      ? await window.electronAPI.dbGetTasks({ projectId: currentProjectId || 'default' })
+      : await storage.getTasks(currentProjectId || 'default')
     if (res.success && res.data) {
       const mapped: ReduxTask[] = res.data.map((row: any) => ({
         id: row.id,
-        projectId: (row.project_id as string) || 'default',
+        projectId: row.projectId || (row as any).project_id || 'default',
         title: row.title,
         description: row.description ?? '',
-        startDate: new Date(row.start_date),
-        endDate: new Date(row.end_date),
+        startDate: new Date(row.startDate || row.start_date),
+        endDate: new Date(row.endDate || row.end_date),
         progress: row.progress,
         priority: row.priority,
         dependencies: row.dependencies ?? [],
         status: row.status,
-        estimatedHours: row.estimated_hours ?? 0,
-        actualHours: row.actual_hours ?? undefined,
+        estimatedHours: row.estimatedHours ?? row.estimated_hours ?? 0,
+        actualHours: row.actualHours ?? row.actual_hours ?? undefined,
         assignee: row.assignee ?? undefined,
         tags: row.tags ?? [],
       }))

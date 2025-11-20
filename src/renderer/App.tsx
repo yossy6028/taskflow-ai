@@ -24,22 +24,24 @@ function App() {
   
   // 開発用: LocalStorageの古いTODOデータをクリア（初回のみ）
   useEffect(() => {
-    const cleared = localStorage.getItem('todos-cleared-v2')
-    if (!cleared) {
-      console.log('Clearing old TODO data...')
-      // 古いTODOデータをクリア
-      localStorage.removeItem('taskflow-todos')
-      // 各タスクの生成済みフラグもクリア
-      const keys = Object.keys(localStorage)
-      keys.forEach(key => {
-        if (key.startsWith('task-todos-generated-')) {
-          localStorage.removeItem(key)
-        }
-      })
-      localStorage.setItem('todos-cleared-v2', 'true')
-      console.log('Old TODO data cleared')
-      // ページをリロードして新しい状態で開始
-      window.location.reload()
+    if (import.meta.env.DEV) {
+      const cleared = localStorage.getItem('todos-cleared-v2')
+      if (!cleared) {
+        console.log('Clearing old TODO data...')
+        // 古いTODOデータをクリア
+        localStorage.removeItem('taskflow-todos')
+        // 各タスクの生成済みフラグもクリア
+        const keys = Object.keys(localStorage)
+        keys.forEach(key => {
+          if (key.startsWith('task-todos-generated-')) {
+            localStorage.removeItem(key)
+          }
+        })
+        localStorage.setItem('todos-cleared-v2', 'true')
+        console.log('Old TODO data cleared')
+        // ページをリロードして新しい状態で開始（開発時のみ）
+        window.location.reload()
+      }
     }
   }, [])
   

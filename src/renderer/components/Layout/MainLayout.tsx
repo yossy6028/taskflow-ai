@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { 
   Home, 
   MessageSquare, 
@@ -30,8 +30,30 @@ import { useDispatch, useSelector } from 'react-redux'
 import type { RootState } from '../../store'
 import { setTasks, Task as ReduxTask } from '../../store/slices/tasksSlice'
 import ProjectCreationModal from '../Projects/ProjectCreationModal'
-import { addProject, setCurrentProject } from '../../store/slices/projectsSlice'
+import { addProject, setCurrentProject, setProjects, Project, createDefaultProject } from '../../store/slices/projectsSlice'
 import AuthStatus from '../Auth/AuthStatus'
+import { fetchProjectsFromCloud, persistProjectToCloud } from '../../utils/projectSync'
+
+const ensureDefaultProject = (projectList: Project[]) => {
+  if (projectList.some(p => p.id === 'default')) {
+    return projectList
+  }
+  return [createDefaultProject(), ...projectList]
+}
+
+const mergeProjects = (localProjects: Project[], remoteProjects: Project[]) => {
+  const mergedMap = new Map<string, Project>()
+  localProjects.forEach(project => mergedMap.set(project.id, project))
+  remoteProjects.forEach(project => mergedMap.set(project.id, project))
+  const merged = ensureDefaultProject(Array.from(mergedMap.values()))
+  return merged.sort((a, b) => {
+    if (a.id === 'default') return -1
+    if (b.id === 'default') return 1
+    const aTime = a.createdAt instanceof Date ? a.createdAt.getTime() : 0
+    const bTime = b.createdAt instanceof Date ? b.createdAt.getTime() : 0
+    return aTime - bTime
+  })
+}
 
 interface MainLayoutProps {
   children: React.ReactNode
@@ -46,13 +68,19 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
   const [activeSection, setActiveSection] = useState('dialogue')
   const [showNotifications, setShowNotifications] = useState(false)
   const [showProjectCreate, setShowProjectCreate] = useState(false)
+  const hasSyncedProjectsRef = useRef(false)
+  const projectsRef = useRef<Project[]>([])
+  const currentProjectIdRef = useRef<string | null>(null)
   
   const currentProjectId = useSelector((state: RootState) => state.projects.currentProjectId)
+  const projects = useSelector((state: RootState) => state.projects.projects)
   const chatCount = useSelector((state: RootState) => state.chat.messages.length)
   const allTasks = useSelector((state: RootState) => state.tasks.tasks)
   // サイドバー表示: default 選択時は横断集計、それ以外は現在プロジェクト集計
   // default のときも 'default' プロジェクトのタスクは横断集計から除外
-  const activeProjectIds = useSelector((state: RootState) => state.projects.projects.filter(p => p.id !== 'default' && (p as any).status !== 'archived').map(p => p.id))
+  const activeProjectIds = projects
+    .filter(p => p.id !== 'default' && (p as any).status !== 'archived')
+    .map(p => p.id)
   const tasksForSidebar = currentProjectId === 'default'
     ? allTasks.filter(t => activeProjectIds.includes(t.projectId || ''))
     : allTasks.filter(t => t.projectId === currentProjectId)
@@ -99,6 +127,45 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
     window.addEventListener('tf:navigate', handler as EventListener)
     return () => window.removeEventListener('tf:navigate', handler as EventListener)
   }, [isMobile])
+
+  useEffect(() => {
+    projectsRef.current = projects
+  }, [projects])
+
+  useEffect(() => {
+    currentProjectIdRef.current = currentProjectId
+  }, [currentProjectId])
+
+  // Firebase上のプロジェクトと同期
+  useEffect(() => {
+    if (hasSyncedProjectsRef.current) return
+    const syncProjects = async () => {
+      try {
+        const cloudProjects = await fetchProjectsFromCloud()
+        const localProjects = projectsRef.current
+        if (cloudProjects.length > 0) {
+          const merged = mergeProjects(localProjects, cloudProjects)
+          dispatch(setProjects(merged))
+          const activeProjectId = currentProjectIdRef.current
+          if (activeProjectId && !merged.some(p => p.id === activeProjectId)) {
+            const fallbackProject = merged.find(p => p.id !== 'default') || merged[0]
+            dispatch(setCurrentProject(fallbackProject?.id || 'default'))
+          }
+        } else {
+          const localUserProjects = localProjects.filter(p => p.id !== 'default')
+          if (localUserProjects.length > 0) {
+            await Promise.all(localUserProjects.map(persistProjectToCloud))
+          }
+        }
+      } catch (error) {
+        console.error('Failed to sync projects with Firebase:', error)
+      } finally {
+        hasSyncedProjectsRef.current = true
+      }
+    }
+
+    void syncProjects()
+  }, [dispatch])
 
   // 現在のプロジェクトのタスクをロード（初回とプロジェクト切替時）
   useEffect(() => {
@@ -479,6 +546,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
           setShowProjectCreate(false)
           // プロジェクト切替直後は空で初期化し、DBから再取得
           dispatch(setTasks([]))
+          void persistProjectToCloud(project)
         }}
       />
     </div>
